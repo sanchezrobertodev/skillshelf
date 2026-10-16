@@ -46,6 +46,8 @@ npm run typecheck
 npm test               # cargo test (parsers, version logic, git comparisons)
 ```
 
+Before pushing, run `make check`. It runs the typecheck, `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`, which is the same work as the CI `test` job plus lint and format checks. The `Makefile` also has `install`, `test`, `lint`, `fmt`, `dev` and `build`.
+
 `npm run dev` in a plain browser reads `src/dev/snapshot.json` when it exists (git-ignored). To create it from your own install:
 
 ```bash
