@@ -127,7 +127,7 @@ export function AppUpdateBanner() {
           <RefreshCw aria-hidden className="size-3.5" />
           Retry
         </Button>
-        <IconButton label="Dismiss" className="-my-1 size-7" onClick={() => useAppUpdate.setState({ phase: "available" })}>
+        <IconButton label="Dismiss" className="-my-1 size-7" onClick={() => useAppUpdate.setState({ phase: "available", dismissed: true })}>
           <X className="size-3.5" />
         </IconButton>
       </div>
