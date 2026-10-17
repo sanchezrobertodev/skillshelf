@@ -3,6 +3,7 @@ name = "skillshelf"
 version = "0.1.0"
 description = "Browse, filter and update your installed Claude Code skills and plugins"
 authors = ["Roberto Sanchez"]
+license = "MIT"
 edition = "2024"
 
 [lib]

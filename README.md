@@ -25,6 +25,25 @@ Plugin changes apply after you restart Claude Code. The app shows a reminder whe
 
 Sometimes a marketplace declares its own install command for an update. When that happens, Skillshelf shows you the exact command and its hash and runs it only if you approve. It never passes `-y` blindly.
 
+## Install
+
+Download the installer for your OS from [Releases](https://github.com/sanchezrobertodev/skillshelf/releases):
+
+| OS | File |
+|---|---|
+| Windows | `Skillshelf_<version>_x64-setup.exe` (or the `.msi`) |
+| macOS (Apple silicon and Intel) | `Skillshelf_<version>_universal.dmg` |
+| Linux | `.AppImage`, `.deb` or `.rpm` |
+
+The installers aren't code-signed yet, so the first launch shows a warning:
+
+- **Windows**: SmartScreen shows "Windows protected your PC". Click **More info**, then **Run anyway**.
+- **macOS**: Gatekeeper says Apple can't verify the app, or that it is damaged. After dragging Skillshelf to Applications, either click **Open Anyway** in System Settings → Privacy & Security, or run this once:
+  ```bash
+  xattr -cr /Applications/Skillshelf.app
+  ```
+- **Linux**: make the AppImage executable (`chmod +x Skillshelf_*.AppImage`) and run it, or install the package with `sudo apt install ./Skillshelf_*.deb` or `sudo dnf install ./Skillshelf-*.rpm`.
+
 ## Requirements
 
 - `claude` (Claude Code CLI) on `PATH`, needed for plugins
@@ -75,3 +94,7 @@ src/
   store.ts     app state (zustand)
 design-system/ design tokens and rules (ui-ux-pro-max)
 ```
+
+## License
+
+[MIT](LICENSE)
