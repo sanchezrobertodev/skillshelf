@@ -46,7 +46,7 @@ impl Github {
         }
     }
 
-    async fn get(&self, url: &str) -> Result<Value, String> {
+    pub async fn get(&self, url: &str) -> Result<Value, String> {
         let mut req = self.client.get(url).header("Accept", "application/vnd.github+json");
         if let Some(t) = &self.token {
             req = req.bearer_auth(t);

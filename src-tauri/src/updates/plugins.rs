@@ -1,7 +1,7 @@
 //! Marketplace plugins: compare what's installed with the marketplace catalog
 //! (refreshed first with `claude plugin marketplace update`).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -11,7 +11,7 @@ use crate::model::{CheckInfo, Status};
 use crate::scan::read_json;
 use crate::{paths, proc};
 
-const GIT_TIMEOUT: Duration = Duration::from_secs(30);
+pub const GIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub async fn refresh_marketplaces() -> Result<(), String> {
     let out = proc::run(
@@ -50,31 +50,45 @@ pub async fn check(info: &CheckInfo) -> Outcome {
     else {
         return Outcome::unknown("Not a marketplace plugin");
     };
-    let known = read_json(&paths::known_marketplaces_file()).unwrap_or(Value::Null);
-    let Some(location) = known
-        .pointer(&format!("/{}/installLocation", escape_pointer(marketplace)))
-        .and_then(Value::as_str)
-    else {
-        return Outcome::unknown(format!("Marketplace `{marketplace}` is not configured"));
-    };
-    let location = Path::new(location);
-    let Some(catalog) = read_json(&location.join(".claude-plugin").join("marketplace.json")) else {
-        return Outcome::unknown(format!("Marketplace `{marketplace}` has no catalog on disk"));
-    };
-    let Some(entry) = catalog.get("plugins").and_then(Value::as_array).and_then(|list| {
-        list.iter()
-            .find(|p| p.get("name").and_then(Value::as_str) == Some(name.as_str()))
-    }) else {
-        return Outcome::unknown(format!("`{name}` is no longer listed in `{marketplace}`"));
+    let (location, entry) = match locate(marketplace, name) {
+        Ok(found) => found,
+        Err(e) => return Outcome::unknown(e),
     };
     decide(
-        location,
-        entry,
+        &location,
+        &entry,
         installed_version.as_deref(),
         git_sha.as_deref(),
         install_path.as_deref(),
     )
     .await
+}
+
+/// The marketplace's folder on disk and the plugin's entry in its catalog.
+pub fn locate(marketplace: &str, name: &str) -> Result<(PathBuf, Value), String> {
+    let known = read_json(&paths::known_marketplaces_file()).unwrap_or(Value::Null);
+    let location = known
+        .pointer(&format!("/{}/installLocation", escape_pointer(marketplace)))
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("Marketplace `{marketplace}` is not configured"))?;
+    let location = PathBuf::from(location);
+    let catalog = read_json(&location.join(".claude-plugin").join("marketplace.json"))
+        .ok_or_else(|| format!("Marketplace `{marketplace}` has no catalog on disk"))?;
+    let entry = catalog
+        .get("plugins")
+        .and_then(Value::as_array)
+        .and_then(|list| {
+            list.iter()
+                .find(|p| p.get("name").and_then(Value::as_str) == Some(name))
+        })
+        .cloned()
+        .ok_or_else(|| format!("`{name}` is no longer listed in `{marketplace}`"))?;
+    Ok((location, entry))
+}
+
+/// `./plugins/x/` → `plugins/x`, `./` → ``.
+pub fn relative_source(rel: &str) -> &str {
+    rel.trim_start_matches("./").trim_end_matches('/')
 }
 
 fn escape_pointer(s: &str) -> String {
@@ -92,7 +106,7 @@ pub async fn decide(
 
     match entry.get("source") {
         Some(Value::String(rel)) => {
-            let rel = rel.trim_start_matches("./").trim_end_matches('/');
+            let rel = relative_source(rel);
             let plugin_dir = if rel.is_empty() {
                 location.to_path_buf()
             } else {
@@ -253,12 +267,10 @@ fn by_flag(newer: bool, latest: String) -> Outcome {
 
 /// True when anything under `rel` changed between `sha` and HEAD of the marketplace clone.
 pub async fn path_changed_since(repo: &Path, sha: &str, rel: &str) -> Result<bool, String> {
-    let repo_s = repo.display().to_string();
-    let commit = format!("{sha}^{{commit}}");
-    let exists = proc::run("git", &["-C", &repo_s, "cat-file", "-e", &commit], None, GIT_TIMEOUT).await?;
-    if !exists.success() {
+    if !commit_exists(repo, sha).await? {
         return Err("The installed commit isn't in the local marketplace copy".into());
     }
+    let repo_s = repo.display().to_string();
     let path = if rel.is_empty() { "." } else { rel };
     let out = proc::run(
         "git",
@@ -274,7 +286,19 @@ pub async fn path_changed_since(repo: &Path, sha: &str, rel: &str) -> Result<boo
     }
 }
 
-async fn git_head(repo: &Path) -> Result<String, String> {
+pub async fn commit_exists(repo: &Path, sha: &str) -> Result<bool, String> {
+    let commit = format!("{sha}^{{commit}}");
+    let out = proc::run(
+        "git",
+        &["-C", &repo.display().to_string(), "cat-file", "-e", &commit],
+        None,
+        GIT_TIMEOUT,
+    )
+    .await?;
+    Ok(out.success())
+}
+
+pub async fn git_head(repo: &Path) -> Result<String, String> {
     let out = proc::run(
         "git",
         &["-C", &repo.display().to_string(), "rev-parse", "HEAD"],
@@ -285,7 +309,7 @@ async fn git_head(repo: &Path) -> Result<String, String> {
     Ok(out.stdout.trim().to_string())
 }
 
-async fn ls_remote(url: &str, reference: Option<&str>) -> Result<String, String> {
+pub async fn ls_remote(url: &str, reference: Option<&str>) -> Result<String, String> {
     let r = reference.unwrap_or("HEAD");
     let out = proc::run("git", &["ls-remote", url, r], None, GIT_TIMEOUT).await?;
     if !out.success() {

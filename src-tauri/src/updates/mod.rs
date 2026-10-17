@@ -1,5 +1,6 @@
 //! Network/git checks that decide whether each item has an update.
 
+pub mod changelog;
 pub mod plugins;
 pub mod skills;
 

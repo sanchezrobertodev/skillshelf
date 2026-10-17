@@ -10,6 +10,11 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 - In-app updates. Skillshelf checks GitHub Releases for a new version on launch, shows what's new, and installs it with **Install & restart**. Updates are signed and verified before they install. You can also check from **Settings → App updates**.
 - This changelog.
+- **What changed** for skills and plugins with an update: the item's release notes and the commits since your installed version, shown in its details.
+
+### Changed
+
+- Updates now ask for confirmation first, with a short summary of what's new for each item.
 
 ### Notes
 

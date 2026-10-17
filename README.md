@@ -6,6 +6,7 @@ A desktop app for the skills and plugins you've installed for Claude Code. It ru
 
 - **See everything in one list**: marketplace plugins, plugins your claude.ai organization syncs to you, skills installed with the [`skills` CLI](https://skills.sh), hand-made skills in `~/.claude/skills`, and skills in project folders you add.
 - **Check what's out of date**: Skillshelf compares each item with its upstream source (see below).
+- **See what changed** before you update: commits and release notes between your version and the latest (see below).
 - **Update** one item, a selection, or everything with **Update all**.
 - **Filter, sort and search** by type, status, source, marketplace/repo and on/off state. Each filter option shows a count.
 - **Enable/disable** plugins, **uninstall** items (always with a confirmation), and open an item's folder or source repo.
@@ -22,6 +23,37 @@ A desktop app for the skills and plugins you've installed for Claude Code. It ru
 GitHub's anonymous API limit is 60 requests/hour, which is usually enough. If you are signed in with `gh` (or `GITHUB_TOKEN`/`GH_TOKEN` is set), Skillshelf uses that token.
 
 Plugin changes apply after you restart Claude Code. The app shows a reminder when that's needed.
+
+## What changed
+
+When you open an item with an update, the detail panel lists what changed since your version. The update confirmation shows a one-line summary. Skillshelf looks this up only when you open an item, never during the update check.
+
+| Source | Where the list comes from |
+|---|---|
+| Marketplace plugin | `git log <installed commit>..HEAD -- <plugin folder>` in the local marketplace copy. Claude Code clones marketplaces shallowly, so when the installed commit isn't there and the marketplace is on GitHub, the same list comes from the GitHub API (two requests). If the plugin folder has a `CHANGELOG.md`, the releases newer than your version are shown too |
+| Plugin pinned to a commit of its own GitHub repo | GitHub compare API, installed commit to latest |
+| `skills` CLI skill | Commits that touched the skill's folder since your last update (`updatedAt` in the lockfile), one GitHub request |
+| Skill with `skill-release.json` | The `changelog` or `changelogUrl` field (see below) |
+| Org-synced plugin, local or project skill | Shown as "No changelog available". There's no upstream history to read |
+
+Results are cached until the item's version changes, so reopening an item doesn't cost another request.
+
+### Changelogs for `skill-release.json`
+
+A skill that ships an update manifest can publish release notes in one of two optional fields, either in the remote manifest (`updateManifestUrl`) or in the local `skill-release.json`. The remote manifest wins when both have one.
+
+```json
+{
+  "version": "1.4.0",
+  "updateManifestUrl": "https://example.com/my-skill/release.json",
+  "changelogUrl": "https://example.com/my-skill/CHANGELOG.md"
+}
+```
+
+- `changelogUrl`: an `https` link to a markdown file.
+- `changelog`: the markdown inline, as a string.
+
+Use one heading per release with the version in it (`## 1.4.0`, `## [1.4.0] - 2026-10-01`, `## v1.4.0`). Skillshelf shows the releases newer than the installed version, up to the latest. A changelog without version headings is shown whole.
 
 Sometimes a marketplace declares its own install command for an update. When that happens, Skillshelf shows you the exact command and its hash and runs it only if you approve. It never passes `-y` blindly.
 
