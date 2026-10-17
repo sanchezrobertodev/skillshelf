@@ -5,6 +5,7 @@ import { changelogCounts, isEmpty, newestChange, useChangelog } from "../lib/cha
 import { sourceLabel, uninstallEffect } from "../lib/format";
 import { useStore } from "../store";
 import type { Environment, Item, Job } from "../types";
+import { AppUpdateSettings } from "./AppUpdate";
 import { Button, IconButton, KindIcon, Modal } from "./ui";
 
 /** Changelog summaries are looked up for this many items at most, to go easy on the GitHub rate limit. */
@@ -285,6 +286,8 @@ export function SettingsDialog() {
           </span>
         </label>
       </section>
+
+      <AppUpdateSettings version={env?.version} />
 
       <section>
         <h3 className="mb-2 text-[13px] font-semibold">Environment</h3>

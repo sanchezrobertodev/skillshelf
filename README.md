@@ -76,6 +76,15 @@ The installers aren't code-signed yet, so the first launch shows a warning:
   ```
 - **Linux**: make the AppImage executable (`chmod +x Skillshelf_*.AppImage`) and run it, or install the package with `sudo apt install ./Skillshelf_*.deb` or `sudo dnf install ./Skillshelf-*.rpm`.
 
+## Updates
+
+Skillshelf updates itself with the [Tauri updater](https://v2.tauri.app/plugin/updater/). On launch it checks the latest GitHub release (`latest.json`). If there is a newer version, a banner shows the version and what's new, and **Install & restart** downloads it, verifies its signature and restarts into the new version. **Settings → App updates** has a **Check for updates** button.
+
+- **Linux**: only the AppImage updates itself. If you installed the `.deb` or `.rpm`, download and install the new package.
+- **0.1.0** shipped without the updater, so install the next version by hand once. Later versions update themselves.
+
+What's new comes from [CHANGELOG.md](CHANGELOG.md).
+
 ## Requirements
 
 - `claude` (Claude Code CLI) on `PATH`, needed for plugins
@@ -111,7 +120,28 @@ cd src-tauri && SKILLSHELF_DUMP=../src/dev/snapshot.json cargo test real_machine
 npm run tauri build
 ```
 
-Output goes to `src-tauri/target/release/bundle/`: MSI and NSIS on Windows, `.app` and DMG on macOS, AppImage, deb and rpm on Linux. Each OS builds its own installers. The GitHub Actions workflow in `.github/workflows/release.yml` builds all three. Pushing a `v*` tag creates a draft release with the installers attached.
+Output goes to `src-tauri/target/release/bundle/`: MSI and NSIS on Windows, `.app` and DMG on macOS, AppImage, deb and rpm on Linux. Each OS builds its own installers. The GitHub Actions workflow in `.github/workflows/release.yml` builds all three.
+
+The build also signs the updater bundles, so it needs the updater's private key:
+
+```bash
+TAURI_SIGNING_PRIVATE_KEY=~/.tauri/skillshelf.key npm run tauri build
+```
+
+Without the key, build without the updater bundles:
+
+```bash
+npm run tauri build -- --config src-tauri/tauri.no-updater.conf.json
+```
+
+### Release
+
+1. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under a new `## [x.y.z] - date` heading.
+2. Set the same version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`.
+3. Push a `vx.y.z` tag. CI creates a draft release with that CHANGELOG section as its notes, plus the installers, the signed updater bundles and `latest.json`. It fails if the section is missing or the tag doesn't match the app version (`node scripts/changelog-section.mjs vx.y.z` runs the same check locally).
+4. Publish the draft. Installed apps see the update once it's the latest release.
+
+CI signs with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The matching public key is in `tauri.conf.json`. If the private key is lost, installed apps can't verify new updates, and every user has to reinstall by hand.
 
 ## Layout
 

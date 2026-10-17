@@ -119,3 +119,17 @@ export interface Changelog {
   /** A request failed; don't cache, so reopening the item tries again. */
   retryable: boolean;
 }
+
+/** A newer Skillshelf release found by the updater. */
+export interface AppUpdate {
+  version: string;
+  currentVersion: string;
+  date: string | null;
+  /** Release notes (the CHANGELOG section for that version, as Markdown). */
+  notes: string | null;
+}
+
+export interface DownloadProgress {
+  downloaded: number;
+  total: number | null;
+}

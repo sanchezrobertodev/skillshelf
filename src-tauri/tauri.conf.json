@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -39,5 +40,11 @@
     "shortDescription": "Claude Code skills & plugins manager",
     "longDescription": "Browse, filter and update the skills and plugins installed for Claude Code.",
     "category": "DeveloperTool"
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMwNjgwQjdCODczOUQyNkYKUldSdjBqbUhld3Rvd055Z0h1ZUhNMTU0ai9oU0lBUDZZVExOUGlMM3FJU3BwcU9YM2RMMlF5UHUK",
+      "endpoints": ["https://github.com/sanchezrobertodev/skillshelf/releases/latest/download/latest.json"]
+    }
   }
 }
