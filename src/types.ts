@@ -91,3 +91,29 @@ export interface Environment {
   os: string;
   version: string;
 }
+
+// Mirrors src-tauri/src/updates/changelog.rs.
+
+export interface ChangelogEntry {
+  sha: string;
+  date: string | null;
+  message: string;
+  url: string | null;
+}
+
+export interface ChangelogSection {
+  version: string | null;
+  title: string;
+  /** Markdown. */
+  body: string;
+}
+
+export interface Changelog {
+  label: string;
+  entries: ChangelogEntry[];
+  total: number;
+  sections: ChangelogSection[];
+  sectionsLabel: string | null;
+  moreUrl: string | null;
+  note: string | null;
+}

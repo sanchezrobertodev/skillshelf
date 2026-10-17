@@ -18,7 +18,7 @@ export function Toolbar() {
   const setTheme = useStore((s) => s.setTheme);
   const checkUpdates = useStore((s) => s.checkUpdates);
   const refresh = useStore((s) => s.refresh);
-  const run = useStore((s) => s.run);
+  const confirm = useStore((s) => s.confirm);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const search = useRef<HTMLInputElement>(null);
 
@@ -102,7 +102,7 @@ export function Toolbar() {
         <Button
           variant="primary"
           disabled={!updatable.length}
-          onClick={() => void run(updatable.map((i) => ({ itemId: i.id, action: "update" as const })))}
+          onClick={() => confirm({ type: "update", items: updatable })}
         >
           <Download aria-hidden className="size-4" />
           Update all{updatable.length ? ` (${updatable.length})` : ""}

@@ -6,6 +6,7 @@ import type { ActionRequest, Item, Job, JobEvent, Settings } from "./types";
 export type Busy = "idle" | "scanning" | "checking";
 
 export type Confirmation =
+  | { type: "update"; items: Item[] }
   | { type: "uninstall"; items: Item[] }
   | { type: "command"; job: Job };
 

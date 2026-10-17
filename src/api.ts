@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { ActionRequest, CheckResult, Environment, JobEvent, ScanResult, Settings } from "./types";
+import type { ActionRequest, Changelog, CheckResult, Environment, JobEvent, ScanResult, Settings } from "./types";
 
 const tauriApi = {
   scan: () => invoke<ScanResult>("scan"),
@@ -10,6 +10,8 @@ const tauriApi = {
     invoke<{ jobId: number; itemId: string }[]>("run_actions", { requests }),
   openFolder: (itemId: string) => invoke<void>("open_item_folder", { itemId }),
   openRepo: (itemId: string) => invoke<void>("open_item_repo", { itemId }),
+  changelog: (itemId: string) => invoke<Changelog>("item_changelog", { itemId }),
+  openChangelogLink: (itemId: string, url: string) => invoke<void>("open_changelog_link", { itemId, url }),
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   environment: () => invoke<Environment>("environment"),

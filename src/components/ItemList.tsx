@@ -95,7 +95,7 @@ function BulkBar({ items }: { items: Item[] }) {
         size="sm"
         variant="primary"
         disabled={!updatable.length}
-        onClick={() => void run(updatable.map((i) => ({ itemId: i.id, action: "update" as const })))}
+        onClick={() => confirm({ type: "update", items: updatable })}
       >
         <Download aria-hidden className="size-3.5" />
         Update{updatable.length ? ` ${updatable.length}` : ""}

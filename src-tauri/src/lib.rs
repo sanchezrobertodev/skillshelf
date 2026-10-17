@@ -137,6 +137,21 @@ fn open_item_repo(app: AppHandle, state: State<'_, AppState>, item_id: String) -
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// What changed between the installed and the latest version. Fetched when the user opens an item.
+#[tauri::command]
+async fn item_changelog(state: State<'_, AppState>, item_id: String) -> Result<updates::changelog::Changelog, String> {
+    let item = state.item(&item_id)?;
+    updates::changelog::for_item(&item).await
+}
+
+#[tauri::command]
+fn open_changelog_link(app: AppHandle, item_id: String, url: String) -> Result<(), String> {
+    if !url.starts_with("https://") || !updates::changelog::is_known_link(&item_id, &url) {
+        return Err("Only links from this item's changelog can be opened".into());
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> Settings {
     state.settings.lock().unwrap().clone()
@@ -201,6 +216,8 @@ pub fn run() {
             run_actions,
             open_item_folder,
             open_item_repo,
+            item_changelog,
+            open_changelog_link,
             get_settings,
             save_settings,
             environment

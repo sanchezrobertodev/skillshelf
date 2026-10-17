@@ -2,9 +2,11 @@ import clsx from "clsx";
 import { Bot, Copy, Download, ExternalLink, FolderOpen, Hammer, Plug, Power, PowerOff, ScrollText, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { api, errorText } from "../api";
+import { showsChangelog } from "../lib/changelog";
 import { canToggle, canUninstall, canUpdate, fullDate, kindLabel, sourceHelp, sourceLabel } from "../lib/format";
 import { useStore } from "../store";
 import type { Child, Item } from "../types";
+import { ChangelogPanel } from "./Changelog";
 import { Button, IconButton, KindIcon, StatusBadge } from "./ui";
 
 const childMeta: Record<Child["kind"], { label: string; icon: typeof Bot }> = {
@@ -89,7 +91,7 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
               size="sm"
               variant={item.status === "updateAvailable" ? "primary" : "secondary"}
               disabled={running}
-              onClick={() => void run([{ itemId: item.id, action: "update" }])}
+              onClick={() => confirm({ type: "update", items: [item] })}
             >
               <Download aria-hidden className="size-3.5" />
               {item.status === "updateAvailable" ? `Update to ${item.latest ?? "latest"}` : "Update"}
@@ -143,6 +145,8 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
           </ul>
         )}
 
+        {item.status === "updateAvailable" && <ChangelogPanel key={item.id} item={item} />}
+
         <dl className="mb-6 grid grid-cols-[104px_1fr] gap-x-3 gap-y-2 text-[13px]">
           <Fact label="Type">{kindLabel[item.kind]}</Fact>
           <Fact label="Source">
@@ -174,6 +178,8 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
             </div>
           </div>
         )}
+
+        {item.status !== "updateAvailable" && showsChangelog(item) && <ChangelogPanel key={item.id} item={item} />}
 
         {groups.map(({ kind, list }) => {
           const { label, icon: Icon } = childMeta[kind];
