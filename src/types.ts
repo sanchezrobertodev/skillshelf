@@ -116,4 +116,6 @@ export interface Changelog {
   sectionsLabel: string | null;
   moreUrl: string | null;
   note: string | null;
+  /** A request failed; don't cache, so reopening the item tries again. */
+  retryable: boolean;
 }

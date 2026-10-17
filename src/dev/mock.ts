@@ -27,7 +27,7 @@ let rateLimitedOnce = false;
 
 /** Sample changelogs covering each state the detail panel can show. */
 function mockChangelog(item: Item): Changelog {
-  const empty = { label: "", entries: [], total: 0, sections: [], sectionsLabel: null, moreUrl: null, note: null };
+  const empty = { label: "", entries: [], total: 0, sections: [], sectionsLabel: null, moreUrl: null, note: null, retryable: false };
   if (item.source === "synced")
     return { ...empty, note: "Your claude.ai organization updates this plugin and doesn't publish what changed." };
   if (item.source === "local" || item.source === "project")

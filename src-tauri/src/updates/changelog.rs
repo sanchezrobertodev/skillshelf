@@ -56,8 +56,7 @@ pub struct Changelog {
     pub more_url: Option<String>,
     /// Why there's nothing to show, or a caveat about what is shown.
     pub note: Option<String>,
-    /// A network request failed: don't cache, so reopening the item tries again.
-    #[serde(skip)]
+    /// A network request failed: not served from cache, so reopening the item tries again.
     pub retryable: bool,
 }
 
@@ -81,14 +80,21 @@ fn cache() -> &'static Mutex<HashMap<CacheKey, Changelog>> {
 /// so reopening an item doesn't spend another GitHub request.
 pub async fn for_item(item: &Item) -> Result<Changelog, String> {
     let key = (item.id.clone(), item.version.clone(), item.latest.clone());
-    if let Some(hit) = cache().lock().unwrap().get(&key) {
-        return Ok(hit.clone());
+    if let Some(hit) = cached(&key) {
+        return Ok(hit);
     }
     let log = build(item).await?;
-    if !log.retryable {
-        cache().lock().unwrap().insert(key, log.clone());
-    }
+    remember(key, log.clone());
     Ok(log)
+}
+
+fn cached(key: &CacheKey) -> Option<Changelog> {
+    cache().lock().unwrap().get(key).filter(|l| !l.retryable).cloned()
+}
+
+/// Every result is kept so `is_known_link` accepts its links; retryable ones are refetched by `cached`.
+fn remember(key: CacheKey, log: Changelog) {
+    cache().lock().unwrap().insert(key, log);
 }
 
 /// True when `url` came from a changelog already fetched for this item, so the UI can only open
@@ -547,6 +553,22 @@ async fn skills_cli(repo: Option<&str>, skill_path: &str, since: Option<&str>) -
 
 // ---------- skill-release.json ----------
 
+/// `changelog` and `changelogUrl` from the remote manifest if it has either, else from the local one,
+/// so a stale local inline changelog never wins over a remote link.
+fn changelog_fields(remote: &Value, local: &Value) -> (Option<String>, Option<String>) {
+    let get = |m: &Value, key: &str| {
+        m.get(key)
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+    };
+    let from = |m: &Value| (get(m, "changelog"), get(m, "changelogUrl"));
+    match from(remote) {
+        (None, None) => from(local),
+        fields => fields,
+    }
+}
+
 /// Skills that publish their own update manifest. The changelog comes from a `changelog` (markdown)
 /// or `changelogUrl` (a markdown file) field in the remote manifest, else in the local skill-release.json.
 async fn release_manifest(
@@ -564,14 +586,7 @@ async fn release_manifest(
     let local = dir
         .and_then(|d| read_json(&Path::new(d).join("skill-release.json")))
         .unwrap_or(Value::Null);
-    let field = |key: &str| {
-        [&remote, &local]
-            .into_iter()
-            .find_map(|m| m.get(key).and_then(Value::as_str).filter(|s| !s.trim().is_empty()))
-            .map(str::to_string)
-    };
-
-    let (text, link) = match (field("changelog"), field("changelogUrl")) {
+    let (text, link) = match changelog_fields(&remote, &local) {
         (Some(text), link) => (text, link),
         (None, Some(link)) => {
             if !link.starts_with("https://") {
@@ -986,6 +1001,33 @@ mod tests {
         assert!(log.note.unwrap().contains("organization"));
         let local = Item::new("s".into(), Kind::Skill, Source::Local, "s".into());
         assert!(for_item(&local).await.unwrap().note.unwrap().contains("No installer"));
+    }
+
+    #[test]
+    fn remote_changelog_fields_win_as_a_unit() {
+        let local = json!({"changelog": "stale local notes"});
+        let remote = json!({"changelogUrl": "https://example.com/CHANGELOG.md"});
+        assert_eq!(
+            changelog_fields(&remote, &local),
+            (None, Some("https://example.com/CHANGELOG.md".into()))
+        );
+        assert_eq!(
+            changelog_fields(&json!({}), &local),
+            (Some("stale local notes".into()), None)
+        );
+    }
+
+    #[test]
+    fn retryable_results_keep_links_but_are_refetched() {
+        let key: CacheKey = ("test:retryable".into(), Some("1".into()), Some("2".into()));
+        let log = Changelog {
+            more_url: Some("https://github.com/o/r/commits/HEAD".into()),
+            retryable: true,
+            ..Default::default()
+        };
+        remember(key.clone(), log);
+        assert!(cached(&key).is_none());
+        assert!(is_known_link("test:retryable", "https://github.com/o/r/commits/HEAD"));
     }
 }
 

@@ -22,7 +22,7 @@ function fetchChangelog(item: Item): Promise<Changelog> {
     p = api
       .changelog(item.id)
       .then((log) => {
-        cache.set(key, log);
+        if (!log.retryable) cache.set(key, log);
         return log;
       })
       .finally(() => pending.delete(key));
