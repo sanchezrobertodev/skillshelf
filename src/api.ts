@@ -1,7 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { ActionRequest, CheckResult, Environment, JobEvent, ScanResult, Settings } from "./types";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import type {
+  ActionRequest,
+  AppUpdate,
+  CheckResult,
+  DownloadProgress,
+  Environment,
+  JobEvent,
+  ScanResult,
+  Settings,
+} from "./types";
+
+/** The update found by the last check, kept for installing. */
+let pendingUpdate: Update | null = null;
 
 const tauriApi = {
   scan: () => invoke<ScanResult>("scan"),
@@ -18,6 +32,24 @@ const tauriApi = {
     return typeof picked === "string" ? picked : null;
   },
   onJob: (cb: (e: JobEvent) => void): Promise<UnlistenFn> => listen<JobEvent>("job", (e) => cb(e.payload)),
+  checkAppUpdate: async (): Promise<AppUpdate | null> => {
+    const update = await check();
+    void pendingUpdate?.close().catch(() => {});
+    pendingUpdate = update;
+    if (!update) return null;
+    return { version: update.version, currentVersion: update.currentVersion, date: update.date ?? null, notes: update.body ?? null };
+  },
+  /** Downloads and installs the pending update, then restarts the app. On Windows the installer closes the app itself. */
+  installAppUpdate: async (onProgress: (p: DownloadProgress) => void) => {
+    if (!pendingUpdate) throw new Error("No update to install. Check for updates first.");
+    const progress: DownloadProgress = { downloaded: 0, total: null };
+    await pendingUpdate.downloadAndInstall((e) => {
+      if (e.event === "Started") progress.total = e.data.contentLength ?? null;
+      else if (e.event === "Progress") progress.downloaded += e.data.chunkLength;
+      onProgress({ ...progress });
+    });
+    await relaunch();
+  },
 };
 
 // Outside Tauri in dev (plain `npm run dev` in a browser), use the mock backend.

@@ -61,17 +61,37 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # On tags this creates a draft GitHub release with the installers attached;
-      # otherwise the bundles are uploaded as workflow artifacts.
+      # The tag's CHANGELOG.md section becomes the release notes, and tauri-action copies it
+      # into latest.json, where the app reads it. Fails if the section is missing or the tag
+      # doesn't match the app version.
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo 'body<<CHANGELOG_EOF'
+            node scripts/changelog-section.mjs "$TAG"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+      # On tags this creates a draft GitHub release with the installers, the updater bundles,
+      # their .sig files and latest.json attached; otherwise the bundles are uploaded as workflow
+      # artifacts. Pull requests don't get the signing key, so they skip the updater bundles.
       - uses: tauri-apps/tauri-action@v0
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ github.event_name == 'pull_request' && '--config src-tauri/tauri.no-updater.conf.json' || '' }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Skillshelf {0}', github.ref_name) || '' }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
+          updaterJsonPreferNsis: true
       - uses: actions/upload-artifact@v7
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:

@@ -1,6 +1,8 @@
 import { CircleAlert, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { useAppUpdate } from "./appUpdate";
+import { AppUpdateBanner, ReleaseNotesDialog } from "./components/AppUpdate";
 import { DetailPanel } from "./components/DetailPanel";
 import { ConfirmDialogs, SettingsDialog } from "./components/Dialogs";
 import { FilterSidebar } from "./components/FilterSidebar";
@@ -63,6 +65,7 @@ export default function App() {
   useEffect(() => {
     const s = useStore.getState();
     void s.init();
+    void useAppUpdate.getState().check({ quiet: true });
     const unlisten = api.onJob(s.onJob);
     return () => {
       void unlisten.then((f) => f());
@@ -80,6 +83,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <Toolbar />
+      <AppUpdateBanner />
       {error && (
         <Banner tone="danger" onDismiss={() => useStore.setState({ error: null })}>
           {error}
@@ -105,6 +109,7 @@ export default function App() {
       <QueueDrawer />
       <ConfirmDialogs />
       <SettingsDialog />
+      <ReleaseNotesDialog />
     </div>
   );
 }
