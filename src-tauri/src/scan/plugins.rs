@@ -145,6 +145,7 @@ fn to_item(p: CliPlugin, installed: &HashMap<String, Vec<InstalledEntry>>, known
         }
         item.repo_url = manifest_repo(&manifest);
         item.children = children(path, &manifest, p.mcp_servers.as_ref());
+        item.is_mod = read_json(&path.join("hooks").join("hooks.json")).is_some_and(|h| h.get("modules").is_some());
     }
 
     if item.repo_url.is_none() {
@@ -305,6 +306,25 @@ mod tests {
         let item = to_item(list.into_iter().nth(1).unwrap(), &HashMap::new(), &Value::Null);
         assert_eq!(item.source, Source::Synced);
         assert_eq!(item.id, "plugin:design@synced:synced");
+    }
+
+    #[test]
+    fn mods_are_plugins_whose_hooks_load_modules() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("hooks")).unwrap();
+        let plugin = || CliPlugin {
+            id: "always-skill@local-mods".into(),
+            install_path: Some(dir.path().display().to_string()),
+            ..Default::default()
+        };
+        std::fs::write(dir.path().join("hooks/hooks.json"), r#"{"hooks":{"Stop":[]}}"#).unwrap();
+        assert!(!to_item(plugin(), &HashMap::new(), &Value::Null).is_mod);
+        std::fs::write(
+            dir.path().join("hooks/hooks.json"),
+            r#"{ "modules": ["./register.tsx"] }"#,
+        )
+        .unwrap();
+        assert!(to_item(plugin(), &HashMap::new(), &Value::Null).is_mod);
     }
 
     #[test]

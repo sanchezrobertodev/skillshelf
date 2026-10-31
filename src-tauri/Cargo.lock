@@ -3713,6 +3713,7 @@ dependencies = [
  "dirs 6.0.0",
  "fix-path-env",
  "futures",
+ "regex",
  "reqwest",
  "semver",
  "serde",

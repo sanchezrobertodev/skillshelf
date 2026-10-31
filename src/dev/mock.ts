@@ -10,21 +10,77 @@ import type {
   Environment,
   Item,
   JobEvent,
+  LastRun,
+  McpReport,
+  Readme,
+  Risk,
   ScanResult,
   Settings,
+  Usage,
+  UsageProgress,
+  UsageReport,
 } from "../types";
 
 const snapshots = import.meta.glob<{ default: CheckResult }>("./snapshot.json");
 const listeners = new Set<(e: JobEvent) => void>();
+const usageListeners = new Set<(p: UsageProgress) => void>();
+const lastRuns: Record<string, LastRun> = {};
 let items: Item[] = [];
 let settings: Settings = { projects: [], autoCheck: true };
 let job = 1;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Fills fields an older snapshot doesn't have, and marks two skills moved/removed upstream so those states show. */
 async function load(): Promise<Item[]> {
   const loader = snapshots["./snapshot.json"];
-  return loader ? (await loader()).default.items : [];
+  const loaded: Item[] = loader ? (await loader()).default.items : [];
+  const items = loaded.map((i) => ({ ...i, isMod: i.isMod ?? false, cost: i.cost ?? null, issues: i.issues ?? [], upstream: i.upstream ?? null }));
+  const cli = items.filter((i) => i.source === "skillsCli" && i.status === "upToDate");
+  if (cli[1]) {
+    const repo = cli[1].origin ?? "example/skills";
+    Object.assign(cli[1], {
+      status: "moved",
+      statusDetail: `Moved upstream to ${repo}/skills/${cli[1].name}. Reinstall to keep getting updates.`,
+      upstream: { repo, folder: `skills/${cli[1].name}`, commit: null },
+    });
+  }
+  if (cli[2]) {
+    const repo = cli[2].origin ?? "example/skills";
+    const s = sha(cli[2].id, 9);
+    Object.assign(cli[2], {
+      status: "removed",
+      statusDetail: `Deleted upstream in ${s.slice(0, 12)}: Remove deprecated skills`,
+      upstream: { repo, folder: null, commit: { sha: s, date: hoursAgo(80), message: "Remove deprecated skills", url: `https://github.com/${repo}/commit/${s}` } },
+    });
+  }
+  return items;
 }
+
+/** Same pseudo-random numbers for an item on every call. */
+function seeded(seed: string) {
+  let h = 2166136261;
+  for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0) % 1000) / 1000;
+}
+
+function mockUsage(item: Item): Usage {
+  const rnd = seeded(item.id);
+  const idle = rnd() < 0.35; // about a third unused, so Clean Up has something to show
+  const daily = Array.from({ length: 30 }, () => (idle ? 0 : rnd() < 0.6 ? 0 : Math.round(rnd() * 12)));
+  const uses = daily.reduce((a, b) => a + b, 0);
+  const lastDay = daily.reduce((last, n, i) => (n > 0 ? i : last), -1);
+  const lastUsed = lastDay >= 0 ? hoursAgo((29 - lastDay) * 24 + 3) : rnd() < 0.5 ? hoursAgo(24 * 45) : null;
+  return { uses, lastUsed, daily };
+}
+
+const sampleRisks: Risk[] = [
+  { kind: "hooks", files: ["hooks/hooks.json"], why: "Hooks run commands automatically on Claude Code events, without asking first." },
+  {
+    kind: "scripts",
+    files: ["hooks/session-start.mjs", "scripts/install.sh"],
+    why: "Scripts and programs can run on your computer when the plugin or skill uses them.",
+  },
+];
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const sha = (seed: string, n: number) =>
@@ -38,7 +94,18 @@ let rateLimitedOnce = false;
 
 /** Sample changelogs covering each state the detail panel can show. */
 function mockChangelog(item: Item): Changelog {
-  const empty = { label: "", entries: [], total: 0, sections: [], sectionsLabel: null, moreUrl: null, note: null, retryable: false };
+  const empty = {
+    label: "",
+    entries: [],
+    total: 0,
+    sections: [],
+    sectionsLabel: null,
+    moreUrl: null,
+    note: null,
+    retryable: false,
+    risks: null,
+    installed: null,
+  };
   if (item.source === "synced")
     return { ...empty, note: "Your claude.ai organization updates this plugin and doesn't publish what changed." };
   if (item.source === "local" || item.source === "project")
@@ -94,6 +161,7 @@ function mockChangelog(item: Item): Changelog {
       sections: item.name.includes("understand") ? [] : sections,
       sectionsLabel: "CHANGELOG.md",
       moreUrl: `https://github.com/${repo}/commits/HEAD/plugins/${item.name}`,
+      risks: item.name.includes("runpod") ? sampleRisks : [],
     };
   }
   if (item.source === "skillsCli") {
@@ -108,13 +176,26 @@ function mockChangelog(item: Item): Changelog {
       "feat(cli): save check, snapshot and render artifacts per revision (#5522)",
       "docs(skills): fix frame-worker contract, lint codes and stale references (#5515)",
     ];
-    const entries = commits(repo, item.id, all.slice(0, 1 + (item.name.length % all.length)));
+    const listed = commits(repo, item.id, all);
+    const n = 1 + (item.name.length % (all.length - 1));
+    const entries = listed.slice(0, n);
     return {
       ...empty,
-      label: "Commits that touched this skill since your last update",
+      label: "Commits to this skill since your version",
       entries,
       total: entries.length,
       moreUrl: `https://github.com/${repo}/commits/HEAD/skills/${item.name}`,
+      installed: listed[n],
+      risks:
+        item.name.length % 3 === 0
+          ? [
+              {
+                kind: "allowedTools",
+                files: ["SKILL.md"],
+                why: "Tools listed in a skill's allowed-tools run without a permission prompt. SKILL.md adds Bash(npx:*).",
+              },
+            ]
+          : [],
     };
   }
   return { ...empty, note: "There's nothing to compare this item against." };
@@ -141,7 +222,15 @@ export const mockApi = {
       emit({ state: "queued" }, 0);
       emit({ state: "running" }, 300);
       emit({ state: "log", line: `mock: ${r.action} ${item.name}` }, 600);
-      emit(item.name.includes("runpod") ? { state: "failed", message: "Mock failure" } : { state: "success", message: "Done (mock)" }, 1200);
+      const fails = item.name.includes("runpod");
+      emit(fails ? { state: "failed", message: "Mock failure" } : { state: "success", message: "Done (mock)" }, 1200);
+      lastRuns[item.id] = {
+        action: r.action,
+        state: fails ? "failed" : "success",
+        message: fails ? "Mock failure" : "Done (mock)",
+        lines: [`mock: ${r.action} ${item.name}`],
+        finishedAt: Date.now() + 1200,
+      };
       return { jobId: base.jobId, itemId: item.id };
     }),
   openFolder: async () => {},
@@ -153,6 +242,66 @@ export const mockApi = {
   openChangelogLink: async (_itemId: string, url: string) => {
     window.open(url, "_blank", "noopener");
   },
+  mcpStatus: async (): Promise<McpReport> => {
+    await wait(1500);
+    const s = (plugin: string | null, name: string, target: string | null, transport: string | null, state: McpReport["servers"][number]["state"], reason: string | null = null) => ({
+      plugin,
+      claudeAi: false,
+      name,
+      target,
+      transport,
+      state,
+      reason,
+    });
+    return {
+      checkedAt: Date.now(),
+      servers: [
+        { ...s(null, "Claude Docs", "api.anthropic.com", null, "connected"), claudeAi: true },
+        { ...s(null, "Atlassian MCP", "mcp.atlassian.com", null, "connected"), claudeAi: true },
+        s("runpod", "runpod", "mcp.getrunpod.io", "HTTP", "connected"),
+        s("pm-skills", "atlassian", "mcp.atlassian.com", "SSE", "needsAuth"),
+        s("design", "figma", "mcp.figma.com", "HTTP", "needsAuth"),
+        s("design", "google calendar", null, "HTTP", "notConfigured"),
+        s("vgv-ai-flutter-plugin", "very-good-cli", "very_good", null, "failed", "CONNECTION_CLOSED: Connection closed"),
+        s("data", "definite", "api.definite.app", "HTTP", "failed", "MCP endpoint not found at api.definite.app. Check the URL in your MCP config."),
+        s("pdf-viewer", "pdf", "npx", null, "connected"),
+        s(null, "rea", "node", null, "connected"),
+        s(null, "blender", "uvx", null, "pending"),
+      ],
+    };
+  },
+  usage: async (): Promise<UsageReport> => {
+    for (let read = 0; read <= 100; read += 20) {
+      usageListeners.forEach((l) => l({ read, total: 100 }));
+      await wait(150);
+    }
+    return { byItem: Object.fromEntries(items.map((i) => [i.id, mockUsage(i)])), files: 1007, indexedAt: Date.now() };
+  },
+  onUsageProgress: async (cb: (p: UsageProgress) => void) => {
+    usageListeners.add(cb);
+    return () => usageListeners.delete(cb);
+  },
+  readme: async (itemId: string): Promise<Readme | null> => {
+    await wait(200);
+    const item = items.find((i) => i.id === itemId);
+    if (!item?.path) return null;
+    const body = [
+      `# ${item.name}`,
+      "",
+      item.description ?? "No description.",
+      "",
+      "## Usage",
+      "",
+      `- Run \`/${item.name}\` or ask Claude to use it.`,
+      "- Works offline once installed.",
+      "",
+      "```bash",
+      `claude plugin install ${item.name}`,
+      "```",
+    ].join("\n");
+    return { file: item.kind === "skill" ? "SKILL.md" : "README.md", text: body, truncated: false };
+  },
+  lastRuns: async () => lastRuns,
   getSettings: async () => settings,
   saveSettings: async (s: Settings) => {
     settings = s;

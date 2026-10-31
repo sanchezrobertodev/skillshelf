@@ -10,6 +10,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::plugins::{self, GIT_TIMEOUT};
+use super::risk::{self, Contents, Risk};
 use super::skills::{Github, skill_folder};
 use crate::model::{CheckInfo, Item, Source};
 use crate::proc;
@@ -19,6 +20,8 @@ use crate::scan::read_json;
 const MAX_ENTRIES: usize = 50;
 const MAX_SECTIONS: usize = 20;
 const MAX_SECTION_CHARS: usize = 6000;
+/// Commits checked when looking for the one a skills CLI install matches.
+const MAX_HASH_LOOKUPS: usize = 30;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +61,10 @@ pub struct Changelog {
     pub note: Option<String>,
     /// A network request failed: not served from cache, so reopening the item tries again.
     pub retryable: bool,
+    /// Hooks, MCP servers, scripts or allowed tools the update adds or changes; `None` when that couldn't be checked.
+    pub risks: Option<Vec<Risk>>,
+    /// The commit the installed version matches, when Skillshelf could tell.
+    pub installed: Option<Entry>,
 }
 
 impl Changelog {
@@ -103,7 +110,11 @@ pub fn is_known_link(item_id: &str, url: &str) -> bool {
     cache().lock().unwrap().iter().any(|((id, ..), log)| {
         id == item_id
             && (log.more_url.as_deref() == Some(url)
-                || log.entries.iter().any(|e| e.url.as_deref() == Some(url))
+                || log
+                    .entries
+                    .iter()
+                    .chain(&log.installed)
+                    .any(|e| e.url.as_deref() == Some(url))
                 || log.sections.iter().any(|s| s.body.contains(url)))
     })
 }
@@ -118,12 +129,24 @@ async fn build(item: &Item) -> Result<Changelog, String> {
             name,
             installed_version,
             git_sha,
+            install_path,
             ..
-        } => plugin(marketplace, name, installed_version.as_deref(), git_sha.as_deref()).await,
-        CheckInfo::SkillsCli { repo, skill_path, .. } => {
-            let since = item.updated_at.as_deref().or(item.installed_at.as_deref());
-            skills_cli(repo.as_deref(), skill_path, since).await
+        } => {
+            plugin(
+                marketplace,
+                name,
+                installed_version.as_deref(),
+                git_sha.as_deref(),
+                install_path.as_deref(),
+            )
+            .await
         }
+        CheckInfo::SkillsCli {
+            repo,
+            skill_path,
+            folder_hash,
+            ..
+        } => skills_cli(repo.as_deref(), skill_path, folder_hash.as_deref()).await,
         CheckInfo::ReleaseManifest { url, version } => {
             release_manifest(url, version.as_deref(), item.latest.as_deref(), item.path.as_deref()).await
         }
@@ -141,6 +164,7 @@ async fn plugin(
     name: &str,
     installed: Option<&str>,
     git_sha: Option<&str>,
+    install_path: Option<&Path>,
 ) -> Result<Changelog, String> {
     let (location, entry) = match plugins::locate(marketplace, name) {
         Ok(found) => found,
@@ -148,7 +172,13 @@ async fn plugin(
     };
     match entry.get("source") {
         Some(Value::String(rel)) => {
-            Ok(marketplace_changes(&location, plugins::relative_source(rel), installed, git_sha).await)
+            let rel = plugins::relative_source(rel);
+            let mut log = marketplace_changes(&location, rel, installed, git_sha).await;
+            // An update copies the plugin from the local marketplace copy, so compare the two folders.
+            log.risks = install_path
+                .filter(|p| p.is_dir())
+                .map(|p| risk::between_folders(p, &location.join(rel)));
+            Ok(log)
         }
         Some(Value::Object(src)) => external_changes(src, git_sha).await,
         _ => Ok(Changelog::unavailable(
@@ -448,14 +478,53 @@ async fn external_changes(src: &Map<String, Value>, git_sha: Option<&str>) -> Re
         .map(|n| n as usize)
         .unwrap_or(entries.len());
     let subdir = src.get("path").and_then(Value::as_str).filter(|p| !p.is_empty());
+    let prefix = subdir.map(|p| format!("{}/", p.trim_matches('/'))).unwrap_or_default();
+    let risks = match compare_files(&v, &prefix) {
+        Some(changed) => Some(risk::assess(
+            &changed,
+            &github_contents(&repo, base, &head, &prefix, &changed).await,
+        )),
+        None => None,
+    };
     Ok(Changelog {
         label: format!("Commits in {repo} since the installed commit"),
         total,
         entries: entries.into_iter().take(MAX_ENTRIES).collect(),
         more_url: v.get("html_url").and_then(Value::as_str).map(str::to_string),
         note: subdir.map(|p| format!("Includes commits outside the plugin's folder (`{p}`).")),
+        risks,
         ..Default::default()
     })
+}
+
+/// Files a compare response says changed under `prefix`, relative to it. `None` when GitHub cut the
+/// list short (it stops at 300 files), since a missing file could be the risky one.
+pub fn compare_files(compare: &Value, prefix: &str) -> Option<Vec<String>> {
+    let files = compare.get("files")?.as_array()?;
+    if files.len() >= 300 {
+        return None;
+    }
+    Some(
+        files
+            .iter()
+            .filter_map(|f| f.get("filename")?.as_str()?.strip_prefix(prefix))
+            .map(str::to_string)
+            .collect(),
+    )
+}
+
+/// Before and after text of the changed files whose risk depends on what's inside them.
+async fn github_contents(repo: &str, base: &str, head: &str, prefix: &str, changed: &[String]) -> Contents {
+    let mut out = Contents::new();
+    for rel in changed {
+        let name = rel.rsplit('/').next().unwrap_or(rel).to_ascii_lowercase();
+        if name == "plugin.json" || name == "skill.md" {
+            let full = format!("{prefix}{rel}");
+            let pair = (raw_file(repo, base, &full).await, raw_file(repo, head, &full).await);
+            out.insert(rel.clone(), pair);
+        }
+    }
+    out
 }
 
 /// `owner/repo` for GitHub https, ssh and scp-style URLs.
@@ -509,46 +578,113 @@ pub fn parse_github_commits(v: &Value) -> Vec<Entry> {
 
 // ---------- skills CLI ----------
 
-async fn skills_cli(repo: Option<&str>, skill_path: &str, since: Option<&str>) -> Result<Changelog, String> {
+/// Skills installed with the `skills` CLI. The lockfile records the folder's git tree hash, so the
+/// installed commit is the newest commit after which the folder had that hash, and what's new is
+/// every later commit to the folder. One request per commit checked, at most `MAX_HASH_LOOKUPS`.
+async fn skills_cli(repo: Option<&str>, skill_path: &str, folder_hash: Option<&str>) -> Result<Changelog, String> {
     let Some(repo) = repo else {
         return Ok(Changelog::unavailable(
             "Only skills installed from GitHub have a history Skillshelf can read.",
         ));
     };
-    let Some(since) = since else {
-        return Ok(Changelog::unavailable(
-            "The skills lockfile doesn't say when this skill was installed, so there's no starting point.",
-        ));
-    };
     let folder = skill_folder(skill_path);
-    let mut params = vec![("since", since), ("per_page", "100")];
+    let per_page = MAX_HASH_LOOKUPS.to_string();
+    let mut params = vec![("per_page", per_page.as_str())];
     if !folder.is_empty() {
         params.push(("path", folder.as_str()));
     }
     let url = reqwest::Url::parse_with_params(&format!("https://api.github.com/repos/{repo}/commits"), &params)
         .map_err(|e| format!("Bad repository name `{repo}`: {e}"))?;
-    let v = Github::new().await.get(url.as_str()).await?;
-    let entries = parse_github_commits(&v);
+    let gh = Github::new().await;
+    let list = gh.get(url.as_str()).await?;
+    let commits = parse_github_commits(&list);
     let path = if folder.is_empty() {
         String::new()
     } else {
         format!("/{folder}")
     };
-    let note = if entries.is_empty() {
-        Some("GitHub lists no commits to this skill's folder since your last update. The folder may have moved.".into())
-    } else if entries.len() == 100 {
-        Some("Showing the 100 most recent commits.".into())
-    } else {
-        None
-    };
-    Ok(Changelog {
-        label: "Commits that touched this skill since your last update".into(),
-        total: entries.len(),
-        entries: entries.into_iter().take(MAX_ENTRIES).collect(),
+    let mut log = Changelog {
+        label: "Commits to this skill since your version".into(),
         more_url: Some(format!("https://github.com/{repo}/commits/HEAD{path}")),
-        note,
         ..Default::default()
-    })
+    };
+
+    let found = match folder_hash {
+        None => Err(
+            "The skills lockfile has no folder hash for this skill, so Skillshelf can't tell which version you have."
+                .to_string(),
+        ),
+        Some(hash) => {
+            let mut found = Ok(None);
+            for (i, c) in commits.iter().enumerate() {
+                let at = if folder.is_empty() {
+                    Ok(list
+                        .pointer(&format!("/{i}/commit/tree/sha"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string))
+                } else {
+                    gh.folder_sha(repo, &folder, Some(&c.sha)).await
+                };
+                match at {
+                    Ok(Some(sha)) if sha == hash => {
+                        found = Ok(Some(i));
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        log.retryable = true;
+                        found = Err(format!("Couldn't finish looking for your version: {e}"));
+                        break;
+                    }
+                }
+            }
+            found
+        }
+    };
+
+    match found {
+        Ok(Some(i)) => {
+            log.installed = commits.get(i).cloned();
+            log.total = i;
+            log.entries = commits[..i].iter().take(MAX_ENTRIES).cloned().collect();
+            if i == 0 {
+                log.note = Some("No commits to this skill's folder since your version.".into());
+                log.risks = Some(Vec::new());
+            } else {
+                log.risks = skill_risks(&gh, repo, &folder, &commits[i].sha, &commits[0].sha).await;
+            }
+        }
+        other => {
+            log.label = "Recent commits to this skill".into();
+            log.total = commits.len();
+            log.note = Some(match other {
+                Err(e) => e,
+                _ => format!(
+                    "Your version wasn't found in the last {} changes to this skill, so some of these may already be installed.",
+                    commits.len()
+                ),
+            });
+            log.entries = commits.into_iter().take(MAX_ENTRIES).collect();
+        }
+    }
+    Ok(log)
+}
+
+async fn skill_risks(gh: &Github, repo: &str, folder: &str, base: &str, head: &str) -> Option<Vec<Risk>> {
+    let v = gh
+        .get(&format!("https://api.github.com/repos/{repo}/compare/{base}...{head}"))
+        .await
+        .ok()?;
+    let prefix = if folder.is_empty() {
+        String::new()
+    } else {
+        format!("{folder}/")
+    };
+    let changed = compare_files(&v, &prefix)?;
+    Some(risk::assess(
+        &changed,
+        &github_contents(repo, base, head, &prefix, &changed).await,
+    ))
 }
 
 // ---------- skill-release.json ----------
@@ -895,6 +1031,23 @@ mod tests {
             assert_eq!(github_repo(url).as_deref(), Some("o/r"), "{url}");
         }
         assert_eq!(github_repo("https://gitlab.com/o/r.git"), None);
+    }
+
+    #[test]
+    fn compare_files_under_a_folder() {
+        let v = serde_json::json!({"files": [
+            {"filename": "skills/a/SKILL.md"},
+            {"filename": "skills/a/scripts/x.sh"},
+            {"filename": "skills/b/SKILL.md"}
+        ]});
+        assert_eq!(compare_files(&v, "skills/a/").unwrap(), ["SKILL.md", "scripts/x.sh"]);
+        assert_eq!(compare_files(&v, "").unwrap().len(), 3);
+        let many = serde_json::json!({"files": vec![serde_json::json!({"filename": "f"}); 300]});
+        assert_eq!(
+            compare_files(&many, ""),
+            None,
+            "a cut-off list can't prove nothing risky changed"
+        );
     }
 
     #[test]

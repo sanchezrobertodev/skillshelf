@@ -15,6 +15,10 @@ pub async fn scan_all(settings: &Settings) -> ScanResult {
     let mut items: Vec<Item> = plugins::scan(&mut warnings).await;
     items.extend(skills::scan(settings, &mut warnings));
     items.sort_by_key(|a| a.name.to_lowercase());
+    for item in &mut items {
+        item.cost = crate::cost::estimate(item);
+    }
+    crate::health::check(&mut items);
     ScanResult {
         items,
         warnings,
@@ -35,14 +39,37 @@ pub struct FrontMatter {
     pub version: Option<String>,
 }
 
-pub fn front_matter(text: &str) -> FrontMatter {
-    let text = text.trim_start_matches('\u{feff}');
-    let mut lines = text.lines();
+/// The YAML between the opening and closing `---` lines, or `None` when the file doesn't start with one.
+pub fn front_matter_block(text: &str) -> Option<String> {
+    let mut lines = text.trim_start_matches('\u{feff}').lines();
     if lines.next().map(str::trim) != Some("---") {
-        return FrontMatter::default();
+        return None;
     }
     let block: Vec<&str> = lines.take_while(|l| l.trim() != "---").collect();
-    let block = block.join("\n");
+    Some(block.join("\n"))
+}
+
+/// The text after the front matter block (all of it when there's no closed block).
+pub fn without_front_matter(text: &str) -> &str {
+    let text = text.trim_start_matches('\u{feff}');
+    let mut lines = text.split_inclusive('\n');
+    let Some(first) = lines.next().filter(|l| l.trim() == "---") else {
+        return text;
+    };
+    let mut offset = first.len();
+    for line in lines {
+        offset += line.len();
+        if line.trim() == "---" {
+            return &text[offset..];
+        }
+    }
+    text
+}
+
+pub fn front_matter(text: &str) -> FrontMatter {
+    let Some(block) = front_matter_block(text) else {
+        return FrontMatter::default();
+    };
 
     if let Ok(serde_yaml::Value::Mapping(map)) = serde_yaml::from_str::<serde_yaml::Value>(&block) {
         let get = |k: &str| map.get(k).and_then(yaml_scalar);
@@ -133,6 +160,13 @@ mod tests {
     #[test]
     fn no_front_matter() {
         assert_eq!(front_matter("# Title"), FrontMatter::default());
+    }
+
+    #[test]
+    fn strips_front_matter() {
+        assert_eq!(without_front_matter("---\nname: a\n---\n# Body\n"), "# Body\n");
+        assert_eq!(without_front_matter("# Body"), "# Body");
+        assert_eq!(without_front_matter("---\nunclosed"), "---\nunclosed");
     }
 
     #[test]

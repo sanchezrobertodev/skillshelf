@@ -11,11 +11,14 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 - In-app updates. Skillshelf checks GitHub Releases for a new version on launch, shows what's new, and installs it with **Install & restart**. Updates are signed and verified before they install. You can also check from **Settings → App updates**.
 - This changelog.
 - **What changed** for skills and plugins with an update: the item's release notes and the commits since your installed version, shown in its details.
+- Skills that moved or were deleted upstream now show as **Moved upstream** or **Removed upstream** instead of Unknown.
+- Skills installed with the `skills` CLI whose link in `~/.claude/skills` has gone missing now appear in the list. Before, they were hidden, even though Claude Code doesn't load them.
 
 ### Changed
 
 - New look ("Workbench"): a navigation rail, a soft tinted window with the list and details on cards, teal for actions and orange only for updates. Light and dark themes both meet WCAG AA contrast.
 - Updates now ask for confirmation first, with a short summary of what's new for each item.
+- What changed for a `skills` CLI skill now starts from the exact version you have, found by matching the skill's files, instead of from its install date.
 - Uninstalling a plugin keeps its saved data (settings, caches, downloads) unless you tick **Also delete saved data** in the confirmation. The option only appears when the plugin has data. Before, the data was always deleted.
 
 ### Fixed

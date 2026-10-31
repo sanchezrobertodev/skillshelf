@@ -11,8 +11,13 @@ import type {
   DownloadProgress,
   Environment,
   JobEvent,
+  LastRun,
+  McpReport,
+  Readme,
   ScanResult,
   Settings,
+  UsageProgress,
+  UsageReport,
 } from "./types";
 
 /** The update found by the last check, kept for installing. */
@@ -27,6 +32,14 @@ const tauriApi = {
   openRepo: (itemId: string) => invoke<void>("open_item_repo", { itemId }),
   changelog: (itemId: string) => invoke<Changelog>("item_changelog", { itemId }),
   openChangelogLink: (itemId: string, url: string) => invoke<void>("open_changelog_link", { itemId, url }),
+  /** Connects to every MCP server through `claude mcp list`; takes 30–60 s. */
+  mcpStatus: () => invoke<McpReport>("mcp_status"),
+  /** Counts uses from local transcripts (only what was appended since the last run). */
+  usage: () => invoke<UsageReport>("usage"),
+  onUsageProgress: (cb: (p: UsageProgress) => void): Promise<UnlistenFn> =>
+    listen<UsageProgress>("usage-progress", (e) => cb(e.payload)),
+  readme: (itemId: string) => invoke<Readme | null>("item_readme", { itemId }),
+  lastRuns: () => invoke<Record<string, LastRun>>("last_runs"),
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   environment: () => invoke<Environment>("environment"),

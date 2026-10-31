@@ -2,20 +2,27 @@
 
 pub mod changelog;
 pub mod plugins;
+pub mod risk;
 pub mod skills;
 
-use crate::model::{CheckInfo, CheckResult, Item, Source, Status, now_ms};
+use crate::model::{CheckInfo, CheckResult, Item, Source, Status, Upstream, now_ms};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
     pub status: Status,
     pub latest: Option<String>,
     pub detail: Option<String>,
+    pub upstream: Option<Upstream>,
 }
 
 impl Outcome {
     pub fn new(status: Status, latest: Option<String>, detail: Option<String>) -> Self {
-        Outcome { status, latest, detail }
+        Outcome {
+            status,
+            latest,
+            detail,
+            upstream: None,
+        }
     }
     pub fn unknown(detail: impl Into<String>) -> Self {
         Outcome::new(Status::Unknown, None, Some(detail.into()))
@@ -80,6 +87,7 @@ pub async fn check_all(mut items: Vec<Item>) -> CheckResult {
         item.status = outcome.status;
         item.latest = outcome.latest;
         item.status_detail = outcome.detail;
+        item.upstream = outcome.upstream;
     }
 
     CheckResult {

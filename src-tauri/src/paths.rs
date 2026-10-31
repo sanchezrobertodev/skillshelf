@@ -70,6 +70,11 @@ pub fn user_skills_dir() -> PathBuf {
     claude_dir().join("skills")
 }
 
+/// Where the `skills` CLI keeps global installs; `~/.claude/skills/<name>` links here.
+pub fn agents_skills_dir() -> PathBuf {
+    home().join(".agents").join("skills")
+}
+
 /// Lockfile written by the `skills` CLI (vercel-labs/skills) for global installs.
 pub fn skill_lock_file() -> PathBuf {
     home().join(".agents").join(".skill-lock.json")

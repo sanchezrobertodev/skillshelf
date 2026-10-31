@@ -221,7 +221,7 @@ pub async fn decide(
 }
 
 /// Files Claude Code adds to an installed plugin folder that aren't part of the plugin.
-const IGNORED: &[&str] = &[".in_use", ".orphaned_at", "node_modules", ".git", ".DS_Store"];
+pub const IGNORED: &[&str] = &[".in_use", ".orphaned_at", "node_modules", ".git", ".DS_Store"];
 
 /// True when the two plugin folders don't hold the same files with the same contents.
 pub fn folders_differ(a: &Path, b: &Path) -> bool {

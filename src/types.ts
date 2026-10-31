@@ -2,7 +2,16 @@
 
 export type Kind = "plugin" | "skill";
 export type Source = "marketplace" | "synced" | "skillsCli" | "local" | "project";
-export type Status = "unchecked" | "upToDate" | "updateAvailable" | "unknown" | "managed" | "untracked" | "error";
+export type Status =
+  | "unchecked"
+  | "upToDate"
+  | "updateAvailable"
+  | "unknown"
+  | "managed"
+  | "untracked"
+  | "error"
+  | "moved"
+  | "removed";
 
 export interface Child {
   kind: "skill" | "command" | "agent" | "mcp" | "hook";
@@ -32,6 +41,38 @@ export interface Item {
   meta: Record<string, string>;
   /** Plugins only: size of the plugin's saved data folder; null when it's missing or empty. */
   dataBytes: number | null;
+  /** A Claude Code mod: a plugin whose hooks/hooks.json loads UI modules. */
+  isMod: boolean;
+  /** Rough tokens added to every session while it's on (skill, command and agent listings). */
+  cost: Cost | null;
+  issues: Issue[];
+  /** Set when status is "moved" or "removed". */
+  upstream: Upstream | null;
+}
+
+export interface Cost {
+  total: number;
+  parts: { kind: "skill" | "command" | "agent"; name: string; tokens: number }[];
+}
+
+export interface Issue {
+  code:
+    | "no-frontmatter"
+    | "bad-frontmatter"
+    | "no-description"
+    | "long-description"
+    | "link-missing"
+    | "link-replaced"
+    | "duplicate-name";
+  message: string;
+}
+
+export interface Upstream {
+  /** owner/repo the skill lives in now. */
+  repo: string;
+  folder: string | null;
+  /** The commit that deleted it ("removed"). */
+  commit: ChangelogEntry | null;
 }
 
 export interface ScanResult {
@@ -46,7 +87,7 @@ export interface CheckResult {
   checkedAt: number;
 }
 
-export type Action = "update" | "enable" | "disable" | "uninstall";
+export type Action = "update" | "enable" | "disable" | "uninstall" | "reinstall";
 
 export interface ActionRequest {
   itemId: string;
@@ -122,6 +163,75 @@ export interface Changelog {
   note: string | null;
   /** A request failed; don't cache, so reopening the item tries again. */
   retryable: boolean;
+  /** What the update adds or changes that runs without asking; null when it couldn't be checked. */
+  risks: Risk[] | null;
+  /** The commit the installed version matches, when known. */
+  installed: ChangelogEntry | null;
+}
+
+export interface Risk {
+  kind: "hooks" | "mcp" | "scripts" | "allowedTools";
+  /** Relative to the plugin or skill folder. */
+  files: string[];
+  why: string;
+}
+
+// Mirrors src-tauri/src/mcp.rs.
+
+export type McpState = "connected" | "needsAuth" | "failed" | "notConfigured" | "pending" | "unknown";
+
+export interface McpServer {
+  /** The plugin that ships it. */
+  plugin: string | null;
+  /** A claude.ai connector. */
+  claudeAi: boolean;
+  name: string;
+  /** The URL's host or the command's program name; never the full URL or arguments. */
+  target: string | null;
+  transport: string | null;
+  state: McpState;
+  reason: string | null;
+}
+
+export interface McpReport {
+  servers: McpServer[];
+  checkedAt: number;
+}
+
+// Mirrors src-tauri/src/usage.rs.
+
+export interface Usage {
+  /** Uses in the last 30 days. */
+  uses: number;
+  lastUsed: string | null;
+  /** 30 days, oldest first, ending today (UTC). */
+  daily: number[];
+}
+
+export interface UsageReport {
+  byItem: Record<string, Usage>;
+  files: number;
+  indexedAt: number;
+}
+
+export interface UsageProgress {
+  read: number;
+  total: number;
+}
+
+export interface Readme {
+  file: string;
+  /** Markdown, without front matter. */
+  text: string;
+  truncated: boolean;
+}
+
+export interface LastRun {
+  action: Action;
+  state: Exclude<JobState, "log" | "queued" | "running">;
+  message: string | null;
+  lines: string[];
+  finishedAt: number;
 }
 
 /** A newer Skillshelf release found by the updater. */
