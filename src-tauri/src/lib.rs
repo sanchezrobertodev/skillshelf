@@ -6,6 +6,7 @@ mod model;
 mod paths;
 mod proc;
 mod scan;
+mod selfupdate;
 mod settings;
 mod tray;
 mod updates;
@@ -83,6 +84,31 @@ async fn check_updates(app: AppHandle, state: State<'_, AppState>) -> Result<Che
     state.last_check.store(now_ms(), Ordering::Relaxed);
     tray::announce(&app, &result.items, &state.announced_file);
     Ok(result)
+}
+
+/// When Skillshelf runs from its git clone: how far behind origin's default branch it is. `None`
+/// for installed copies, which use the release updater.
+#[tauri::command]
+async fn clone_status() -> Result<Option<selfupdate::CloneStatus>, String> {
+    match selfupdate::clone_dir() {
+        Some(dir) => selfupdate::status(&dir).await.map(Some),
+        None => Ok(None),
+    }
+}
+
+/// Pulls, rebuilds and starts the new build, then quits. Output arrives as `clone-update-log` events.
+#[tauri::command]
+async fn clone_update(app: AppHandle) -> Result<(), String> {
+    let dir = selfupdate::clone_dir().ok_or("Skillshelf isn't running from a git clone")?;
+    let built = selfupdate::update(&dir, |l| {
+        let _ = app.emit("clone-update-log", l);
+    })
+    .await?;
+    std::process::Command::new(&built)
+        .spawn()
+        .map_err(|e| format!("The update was built, but the new version didn't start: {e}"))?;
+    app.exit(0);
+    Ok(())
 }
 
 /// Cancels the running job and skips every job queued so far.
@@ -389,6 +415,9 @@ pub fn run() {
                 last_check: AtomicU64::new(0),
                 announced_file,
             });
+            if selfupdate::clone_dir().is_some() {
+                selfupdate::remove_old_binary();
+            }
             if let Err(e) = tray::create(app.handle()) {
                 eprintln!("No tray icon ({e}); closing the window will quit.");
             }
@@ -408,6 +437,8 @@ pub fn run() {
             item_readme,
             last_runs,
             stop_actions,
+            clone_status,
+            clone_update,
             update_tray,
             get_settings,
             save_settings,

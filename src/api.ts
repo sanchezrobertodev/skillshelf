@@ -15,6 +15,7 @@ import type {
   McpReport,
   Readme,
   ScanResult,
+  CloneStatus,
   Settings,
   TraySummary,
   UsageProgress,
@@ -41,6 +42,17 @@ const tauriApi = {
     listen<UsageProgress>("usage-progress", (e) => cb(e.payload)),
   readme: (itemId: string) => invoke<Readme | null>("item_readme", { itemId }),
   lastRuns: () => invoke<Record<string, LastRun>>("last_runs"),
+  /** Null unless Skillshelf runs from its git clone. */
+  cloneStatus: () => invoke<CloneStatus | null>("clone_status"),
+  /** Pulls and rebuilds the clone, then the app restarts as the new build. Resolves only on failure. */
+  cloneUpdate: async (onLine: (line: string) => void) => {
+    const unlisten = await listen<string>("clone-update-log", (e) => onLine(e.payload));
+    try {
+      await invoke<void>("clone_update");
+    } finally {
+      unlisten();
+    }
+  },
   /** Cancels the running job and skips the queued ones. */
   stopActions: () => invoke<void>("stop_actions"),
   updateTray: (summary: TraySummary) => invoke<void>("update_tray", { summary }),

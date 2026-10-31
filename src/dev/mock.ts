@@ -15,6 +15,7 @@ import type {
   Readme,
   Risk,
   ScanResult,
+  CloneStatus,
   Settings,
   TraySummary,
   Usage,
@@ -314,6 +315,25 @@ export const mockApi = {
     return { file: item.kind === "skill" ? "SKILL.md" : "README.md", text: body, truncated: false };
   },
   lastRuns: async () => lastRuns,
+  // Add ?clone to the URL to preview clone mode.
+  cloneStatus: async (): Promise<CloneStatus | null> =>
+    new URLSearchParams(location.search).has("clone")
+      ? {
+          dir: "C:\\Dev\\AI\\skillshelf",
+          branch: "master",
+          defaultBranch: "master",
+          behind: 3,
+          commits: ["b6fb380 Screens: Overview, Clean Up, MCP Servers", "0ab9a26 Updates experience: review sheet", "481b906 Backend data for v0.2"],
+          blocked: null,
+        }
+      : null,
+  cloneUpdate: async (onLine: (line: string) => void) => {
+    for (const l of ["$ git pull --ff-only", "Fast-forward", "$ npm ci --no-audit --no-fund", "added 312 packages in 9s", "$ npm run tauri build -- --no-bundle"]) {
+      await new Promise((r) => setTimeout(r, 600));
+      onLine(l);
+    }
+    throw new Error("Mock: the build can't run in the browser preview");
+  },
   stopActions: async () => {
     stopped = true;
   },
