@@ -143,6 +143,19 @@ export function ChangelogPanel({ item }: { item: Item }) {
                   {state.log.note}
                 </p>
               )}
+              {state.log.installed && (
+                <p className="mb-2 text-xs text-muted">
+                  Your version matches commit{" "}
+                  {state.log.installed.url ? (
+                    <Link url={state.log.installed.url} onOpen={onOpen} className="font-mono text-info">
+                      {state.log.installed.sha.slice(0, 7)}
+                    </Link>
+                  ) : (
+                    <span className="font-mono">{state.log.installed.sha.slice(0, 7)}</span>
+                  )}
+                  {state.log.installed.message && <span className="text-fg"> · {state.log.installed.message}</span>}
+                </p>
+              )}
               {state.log.moreUrl && (
                 <Link url={state.log.moreUrl} onOpen={onOpen} className="inline-flex items-center gap-1 text-xs text-info">
                   <ExternalLink aria-hidden className="size-3.5" />

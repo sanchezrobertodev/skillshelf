@@ -13,11 +13,13 @@ export const hasHooks = (i: Item) => i.children.some((c) => c.kind === "hook");
 
 /**
  * An enabled plugin with no uses in 30 days. Plugins with hooks and mods work without leaving a
- * trace in transcripts, so they're never called unused.
+ * trace in transcripts, so they're never called unused; org-managed ones aren't yours to remove.
  */
 export function isUnused(i: Item, usage: Record<string, Usage> | null): boolean {
   const u = usage?.[i.id];
-  return !!u && i.kind === "plugin" && i.enabled !== false && !hasHooks(i) && !i.isMod && u.uses === 0;
+  return (
+    !!u && i.kind === "plugin" && i.source !== "synced" && i.enabled !== false && !hasHooks(i) && !i.isMod && u.uses === 0
+  );
 }
 
 /** 53271 → "53k". */

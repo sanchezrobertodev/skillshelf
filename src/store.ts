@@ -4,7 +4,7 @@ import { useAppUpdate } from "./appUpdate";
 import { canUpdate } from "./lib/format";
 import { isUnused, sessionTokens } from "./lib/insights";
 import { applyTheme, emptyFilters, loadPrefs, savePrefs, type Filters, type Prefs, type SortKey, type Theme } from "./lib/prefs";
-import type { ActionRequest, Item, Job, JobEvent, Settings, TraySummary, Usage, UsageProgress } from "./types";
+import type { ActionRequest, Item, Job, JobEvent, McpReport, Settings, TraySummary, Usage, UsageProgress } from "./types";
 
 export type Busy = "idle" | "scanning" | "checking";
 export type Screen = "overview" | "library" | "cleanup" | "mcp";
@@ -32,6 +32,9 @@ interface State extends Prefs {
   /** Uses per item id from local transcripts; null until the first count finishes. */
   usage: Record<string, Usage> | null;
   usageProgress: UsageProgress | null;
+  mcp: McpReport | null;
+  mcpBusy: boolean;
+  mcpError: string | null;
   restartNeeded: boolean;
   confirmation: Confirmation | null;
   settings: Settings;
@@ -44,6 +47,11 @@ interface State extends Prefs {
   run: (requests: ActionRequest[]) => Promise<void>;
   stop: () => Promise<void>;
   loadUsage: () => Promise<void>;
+  loadMcp: () => Promise<void>;
+  /** Opens the Library with only these filters. */
+  browse: (f: Partial<Filters>) => void;
+  /** Opens one item's details in the Library, clearing filters so its row is visible. */
+  reveal: (id: string) => void;
   onJob: (e: JobEvent) => void;
   setQuery: (q: string) => void;
   setFilters: (f: Partial<Filters>) => void;
@@ -104,6 +112,9 @@ export const useStore = create<State>((set, get) => {
     queueOpen: false,
     usage: null,
     usageProgress: null,
+    mcp: null,
+    mcpBusy: false,
+    mcpError: null,
     restartNeeded: false,
     confirmation: null,
     settings: { projects: [], autoCheck: true },
@@ -168,6 +179,18 @@ export const useStore = create<State>((set, get) => {
       set({ busy: "idle" });
       void get().loadUsage();
       if (opts?.check ?? get().settings.autoCheck) await get().checkUpdates();
+    },
+
+    loadMcp: async () => {
+      if (get().mcpBusy) return;
+      set({ mcpBusy: true, mcpError: null });
+      try {
+        set({ mcp: await api.mcpStatus() });
+      } catch (e) {
+        set({ mcpError: errorText(e) });
+      } finally {
+        set({ mcpBusy: false });
+      }
     },
 
     loadUsage: async () => {
@@ -254,6 +277,14 @@ export const useStore = create<State>((set, get) => {
     setFilters: (f) => {
       set((s) => ({ filters: { ...s.filters, ...f } }));
       persist();
+    },
+    browse: (f) => {
+      set({ filters: { ...emptyFilters, ...f }, query: "", screen: "library" });
+      persist();
+    },
+    reveal: (id) => {
+      get().browse({});
+      set({ activeId: id, detailOpen: true });
     },
     clearFilters: () => {
       set({ filters: emptyFilters, query: "" });

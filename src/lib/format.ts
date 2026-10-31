@@ -77,8 +77,13 @@ export function formatBytes(n: number): string {
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
 }
 
+/** Moved and removed skills can't be updated in place: they're reinstalled from the new location or uninstalled. */
 export function canUpdate(i: Item) {
-  return i.source === "marketplace" || i.source === "skillsCli";
+  return (i.source === "marketplace" || i.source === "skillsCli") && i.status !== "moved" && i.status !== "removed";
+}
+
+export function canReinstall(i: Item) {
+  return i.status === "moved" && i.source === "skillsCli";
 }
 
 export function canToggle(i: Item) {

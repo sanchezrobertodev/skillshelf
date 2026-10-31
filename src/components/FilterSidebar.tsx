@@ -1,9 +1,9 @@
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
-import { countBy, matches, type Facet } from "../lib/filter";
+import { countBy, flagTest, matches, type Facet } from "../lib/filter";
 import { kindLabel, sourceHelp, sourceLabel, statusLabel, statusOrder } from "../lib/format";
-import type { Filters } from "../lib/prefs";
+import type { Filters, Flag } from "../lib/prefs";
 import { useStore } from "../store";
 import type { Kind, Source, Status } from "../types";
 
@@ -85,9 +85,10 @@ export function FilterSidebar() {
   const setFilters = useStore((s) => s.setFilters);
   const clearFilters = useStore((s) => s.clearFilters);
   const query = useDeferredValue(useStore((s) => s.query));
+  const usage = useStore((s) => s.usage);
 
   const facets = useMemo(() => {
-    const pool = (f: Facet) => items.filter((i) => matches(i, filters, query, f));
+    const pool = (f: Facet) => items.filter((i) => matches(i, filters, query, usage, f));
     const kinds = countBy(pool("kinds"), (i) => i.kind);
     const statuses = countBy(pool("statuses"), (i) => i.status);
     const sources = countBy(pool("sources"), (i) => i.source);
@@ -95,8 +96,10 @@ export function FilterSidebar() {
     const origins = countBy(originPool, (i) => i.origin);
     const allOrigins = [...new Set(items.map((i) => i.origin).filter((o): o is string => !!o))];
     const enabledPool = pool("enabled");
-    return { kinds, statuses, sources, origins, allOrigins, enabledPool };
-  }, [items, filters, query]);
+    const flagPool = pool("flags");
+    const flags = new Map((Object.keys(flagTest) as Flag[]).map((k) => [k, flagPool.filter((i) => flagTest[k](i, usage)).length]));
+    return { kinds, statuses, sources, origins, allOrigins, enabledPool, flags };
+  }, [items, filters, query, usage]);
 
   const kindOpts: Option<Kind>[] = (["plugin", "skill"] as Kind[]).map((k) => ({
     value: k,
@@ -122,11 +125,22 @@ export function FilterSidebar() {
     .map((o) => ({ value: o, label: o, count: facets.origins.get(o) ?? 0 }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
+  const flagOpts: Option<Flag>[] = (
+    [
+      ["unused", "Unused", "Enabled plugins with no uses in 30 days"],
+      ["issues", "Has issues", "Skills with frontmatter, description, link or duplicate-name problems"],
+      ["hooks", "Has hooks", "Hooks run on their own, so they never show up as uses"],
+      ["mod", "Mods", "Plugins that change Claude Code itself (hooks/hooks.json loads modules)"],
+    ] as const
+  )
+    .filter(([k]) => k !== "unused" || usage)
+    .map(([value, label, hint]) => ({ value, label, hint, count: facets.flags.get(value) ?? 0 }));
+
   const enabledCount = facets.enabledPool.filter((i) => i.enabled === true).length;
   const disabledCount = facets.enabledPool.filter((i) => i.enabled === false).length;
   const active =
     filters.kinds.length + filters.statuses.length + filters.sources.length + filters.origins.length +
-    (filters.enabled !== "all" ? 1 : 0);
+    filters.flags.length + (filters.enabled !== "all" ? 1 : 0);
 
   const set = (f: Partial<Filters>) => setFilters(f);
 
@@ -147,6 +161,12 @@ export function FilterSidebar() {
           options={statusOpts}
           selected={filters.statuses}
           onToggle={(v) => set({ statuses: toggle(filters.statuses, v) })}
+        />
+        <Group
+          title="Show only"
+          options={flagOpts}
+          selected={filters.flags}
+          onToggle={(v) => set({ flags: toggle(filters.flags, v) })}
         />
         <Group
           title="Source"

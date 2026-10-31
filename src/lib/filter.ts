@@ -1,8 +1,17 @@
-import type { Item } from "../types";
+import type { Item, Usage } from "../types";
 import { statusOrder } from "./format";
-import type { Filters, SortKey } from "./prefs";
+import { hasHooks, isUnused } from "./insights";
+import type { Filters, Flag, SortKey } from "./prefs";
 
-export type Facet = "kinds" | "statuses" | "sources" | "origins" | "enabled";
+export type Facet = "kinds" | "statuses" | "sources" | "origins" | "enabled" | "flags";
+type UsageMap = Record<string, Usage> | null;
+
+export const flagTest: Record<Flag, (i: Item, usage: UsageMap) => boolean> = {
+  mod: (i) => i.isMod,
+  issues: (i) => i.issues.length > 0,
+  unused: isUnused,
+  hooks: hasHooks,
+};
 
 function matchesQuery(i: Item, q: string) {
   if (!q) return true;
@@ -18,7 +27,7 @@ function matchesQuery(i: Item, q: string) {
 }
 
 /** `except` skips one facet so the sidebar can show how many items each option would add. */
-export function matches(i: Item, f: Filters, q: string, except?: Facet) {
+export function matches(i: Item, f: Filters, q: string, usage: UsageMap, except?: Facet) {
   if (except !== "kinds" && f.kinds.length && !f.kinds.includes(i.kind)) return false;
   if (except !== "statuses" && f.statuses.length && !f.statuses.includes(i.status)) return false;
   if (except !== "sources" && f.sources.length && !f.sources.includes(i.source)) return false;
@@ -27,6 +36,7 @@ export function matches(i: Item, f: Filters, q: string, except?: Facet) {
     if (i.enabled === null) return false;
     if (f.enabled === "enabled" !== i.enabled) return false;
   }
+  if (except !== "flags" && f.flags.length && !f.flags.some((k) => flagTest[k](i, usage))) return false;
   return matchesQuery(i, q);
 }
 
@@ -41,7 +51,7 @@ export function countBy<T extends string>(items: Item[], key: (i: Item) => T | n
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-export function sortItems(items: Item[], key: SortKey, desc: boolean) {
+export function sortItems(items: Item[], key: SortKey, desc: boolean, usage: UsageMap) {
   const dir = desc ? -1 : 1;
   const byName = (a: Item, b: Item) => collator.compare(a.name, b.name);
   const cmp: Record<SortKey, (a: Item, b: Item) => number> = {
@@ -51,6 +61,8 @@ export function sortItems(items: Item[], key: SortKey, desc: boolean) {
     version: (a, b) => collator.compare(a.version ?? "", b.version ?? ""),
     status: (a, b) => statusOrder[a.status] - statusOrder[b.status],
     updated: (a, b) => (a.updatedAt ?? a.installedAt ?? "").localeCompare(b.updatedAt ?? b.installedAt ?? ""),
+    cost: (a, b) => (a.cost?.total ?? 0) - (b.cost?.total ?? 0),
+    uses: (a, b) => (usage?.[a.id]?.uses ?? -1) - (usage?.[b.id]?.uses ?? -1),
   };
   return [...items].sort((a, b) => cmp[key](a, b) * dir || byName(a, b));
 }

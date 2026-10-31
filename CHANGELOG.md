@@ -18,6 +18,16 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 - An **Update** button and an **Enabled** switch on each row, and a right-click menu (or Shift+F10) with Update, Turn on/off, Open folder, Open repo and Uninstall. It acts on the whole selection when you right-click a selected row.
 - **Stop** in Activity: cancels the running action and skips the queued ones. Batches show their progress, for example "3 of 9".
 - The window title shows the estimated tokens every session starts with.
+- **Overview**: pending updates, the estimated tokens per session with the five heaviest items, unused plugins, MCP server problems, skill health and skills that changed upstream. Each tile links to the screen or filtered list behind it.
+- **Clean Up**: enabled plugins with no uses in 30 days (biggest first, turn off or uninstall in a batch), plugins with hooks, skills moved upstream (Reinstall) or removed upstream (with the commit that deleted them), and plugins your organization manages.
+- **MCP Servers**: every server from `claude mcp list`, grouped by plugin, with its status and the reason when it fails. Only the host of each URL is shown. The check starts when you open the screen, because it starts every server.
+- Usage: uses per skill and plugin in the last 30 days, counted on this computer from your Claude Code transcripts, which never leave it.
+- Context cost: an estimate of the tokens each item adds to every session, with a breakdown per skill, command and agent.
+- Skill health checks: missing or broken frontmatter, missing or too-long descriptions, missing or replaced `skills` CLI links, and duplicate names. Problems show as a badge in the list and in the details.
+- A **Mod** badge on plugins that change Claude Code itself.
+- The Library gets **Cost** and **Uses** columns (shown when the window is wide enough) and **Show only** filters: Unused, Has issues, Has hooks and Mods.
+- The details panel adds the cost breakdown, a 30-day usage chart, a SKILL.md or README preview, the last action's output, and the commit your installed version matches.
+- **Reinstall** for skills that moved upstream, in the details panel, the right-click menu and Clean Up.
 
 ### Changed
 
