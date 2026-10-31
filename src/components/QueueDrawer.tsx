@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, Clock, LoaderCircle, 
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
 import type { Action, Job } from "../types";
-import { Button } from "./ui";
+import { Button, card } from "./ui";
 
 const actionLabel: Record<Action, string> = { update: "Update", enable: "Enable", disable: "Disable", uninstall: "Uninstall" };
 
@@ -80,7 +80,7 @@ export function QueueDrawer() {
   const done = list.filter((j) => j.state === "success").length;
 
   return (
-    <section aria-label="Action queue" className="shrink-0 border-t border-border-strong bg-surface">
+    <section aria-label="Action queue" className={clsx("mx-5 mb-4 shrink-0 overflow-hidden", card)}>
       <div className="flex h-10 items-center gap-3 px-4">
         <button
           type="button"

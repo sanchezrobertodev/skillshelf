@@ -6,7 +6,7 @@ import { canToggle, canUninstall, canUpdate, relativeTime, sourceLabel } from ".
 import type { SortKey } from "../lib/prefs";
 import { useStore } from "../store";
 import type { Item } from "../types";
-import { Button, Checkbox, KindIcon, StatusBadge } from "./ui";
+import { Button, card, Checkbox, KindIcon, StatusBadge } from "./ui";
 
 type Layout = "wide" | "medium" | "narrow";
 
@@ -235,117 +235,119 @@ export function ItemList({ rows }: { rows: Item[] }) {
   };
 
   return (
-    <section ref={wrap} aria-label="Installed items" className="flex min-w-0 flex-1 flex-col">
+    <section ref={wrap} aria-label="Installed items" className={clsx("flex min-w-0 flex-1 flex-col overflow-hidden", card)}>
       {selectedRows.length > 0 && <BulkBar items={selectedRows} />}
 
       <div
-        role="row"
-        className="grid h-10 shrink-0 items-center gap-3 border-b border-border bg-surface px-4"
-        style={{ gridTemplateColumns: template }}
-      >
-        <div role="columnheader" className="flex items-center">
-          <Checkbox
-            label={allSelected ? "Deselect all" : "Select all shown"}
-            checked={allSelected}
-            indeterminate={selectedRows.length > 0 && !allSelected}
-            onChange={() => setSelected(allSelected ? [] : rows.map((r) => r.id))}
-          />
-        </div>
-        <SortHeader label="Name" k="name" />
-        {layout === "wide" && <SortHeader label="Source" k="source" />}
-        {layout !== "narrow" && <SortHeader label="Version" k="version" />}
-        <SortHeader label="Status" k="status" />
-        {layout === "wide" && <SortHeader label="Updated" k="updated" />}
-      </div>
-
-      <div
-        ref={scroller}
         role="grid"
         aria-label="Skills and plugins"
-        aria-rowcount={rows.length}
+        aria-rowcount={rows.length + 1}
         aria-multiselectable="true"
         aria-activedescendant={activeIndex >= 0 ? `row-${rows[activeIndex].id}` : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-offset-[-2px]"
+        className="flex min-h-0 flex-1 flex-col focus-visible:outline-offset-[-2px]"
       >
-        {busy === "scanning" && total === 0 ? (
-          <SkeletonRows />
-        ) : rows.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-            <FilterX aria-hidden className="size-8 text-muted" />
-            <p className="font-medium">{total ? "Nothing matches these filters" : "No skills or plugins found"}</p>
-            <p className="max-w-sm text-[13px] text-muted">
-              {total
-                ? "Try a different search, or clear the filters to see everything."
-                : "Skillshelf looks in ~/.claude for plugins and skills. Install something with claude plugin install or npx skills add, then refresh."}
-            </p>
-            {total > 0 && (
-              <Button size="sm" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
+        <div
+          role="row"
+          aria-rowindex={1}
+          className="grid h-10 shrink-0 items-center gap-3 border-b border-border bg-surface px-4"
+          style={{ gridTemplateColumns: template }}
+        >
+          <div role="columnheader" className="flex items-center">
+            <Checkbox
+              label={allSelected ? "Deselect all" : "Select all shown"}
+              checked={allSelected}
+              indeterminate={selectedRows.length > 0 && !allSelected}
+              onChange={() => setSelected(allSelected ? [] : rows.map((r) => r.id))}
+            />
           </div>
-        ) : (
-          <div style={{ height: virtualizer.getTotalSize() }} className="relative">
-            {virtualizer.getVirtualItems().map((v) => {
-              const item = rows[v.index];
-              const isSelected = selected.has(item.id);
-              const isActive = item.id === activeId;
-              return (
-                <div
-                  key={item.id}
-                  id={`row-${item.id}`}
-                  role="row"
-                  aria-rowindex={v.index + 1}
-                  aria-selected={isSelected}
-                  onClick={() => setActive(item.id, true)}
-                  className={clsx(
-                    "absolute inset-x-0 grid cursor-pointer items-center gap-3 border-b border-border px-4 transition-colors duration-100",
-                    isActive ? "bg-surface-2 shadow-[inset_3px_0_0_var(--accent)]" : isSelected ? "bg-accent/6" : "hover:bg-surface-hover",
-                  )}
-                  style={{ height: ROW_HEIGHT, transform: `translateY(${v.start}px)`, gridTemplateColumns: template }}
-                >
-                  <div role="gridcell" className="flex items-center">
-                    <Checkbox label={`Select ${item.name}`} checked={isSelected} onChange={() => toggleSelected(item.id)} />
-                  </div>
-                  <div role="gridcell" className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <KindIcon kind={item.kind} className="size-4" />
-                      <span className="truncate font-medium">{item.name}</span>
-                      {item.enabled === false && (
-                        <span className="rounded border border-border-strong px-1.5 text-[11px] text-muted">Disabled</span>
-                      )}
-                      <span className="sr-only">{item.kind}</span>
+          <SortHeader label="Name" k="name" />
+          {layout === "wide" && <SortHeader label="Source" k="source" />}
+          {layout !== "narrow" && <SortHeader label="Version" k="version" />}
+          <SortHeader label="Status" k="status" />
+          {layout === "wide" && <SortHeader label="Updated" k="updated" />}
+        </div>
+
+        <div ref={scroller} role="rowgroup" className="relative min-h-0 flex-1 overflow-y-auto">
+          {busy === "scanning" && total === 0 ? (
+            <SkeletonRows />
+          ) : rows.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+              <FilterX aria-hidden className="size-8 text-muted" />
+              <p className="font-medium">{total ? "Nothing matches these filters" : "No skills or plugins found"}</p>
+              <p className="max-w-sm text-[13px] text-muted">
+                {total
+                  ? "Try a different search, or clear the filters to see everything."
+                  : "Skillshelf looks in ~/.claude for plugins and skills. Install something with claude plugin install or npx skills add, then refresh."}
+              </p>
+              {total > 0 && (
+                <Button size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div style={{ height: virtualizer.getTotalSize() }} className="relative">
+              {virtualizer.getVirtualItems().map((v) => {
+                const item = rows[v.index];
+                const isSelected = selected.has(item.id);
+                const isActive = item.id === activeId;
+                return (
+                  <div
+                    key={item.id}
+                    id={`row-${item.id}`}
+                    role="row"
+                    aria-rowindex={v.index + 2}
+                    aria-selected={isSelected}
+                    onClick={() => setActive(item.id, true)}
+                    className={clsx(
+                      "absolute inset-x-0 grid cursor-pointer items-center gap-3 border-b border-border px-4 transition-colors duration-100",
+                      isActive ? "bg-surface-2 shadow-[inset_3px_0_0_var(--accent)]" : isSelected ? "bg-accent/6" : "hover:bg-surface-hover",
+                    )}
+                    style={{ height: ROW_HEIGHT, transform: `translateY(${v.start}px)`, gridTemplateColumns: template }}
+                  >
+                    <div role="gridcell" className="flex items-center">
+                      <Checkbox label={`Select ${item.name}`} checked={isSelected} onChange={() => toggleSelected(item.id)} />
                     </div>
-                    <p className="truncate pl-6 text-xs text-muted">{item.description ?? "No description"}</p>
-                  </div>
-                  {layout === "wide" && (
-                    <div role="gridcell" className="min-w-0 text-[13px]">
-                      <div className="truncate">{sourceLabel[item.source]}</div>
-                      <div className="truncate font-mono text-[11px] text-muted" title={item.origin ?? undefined}>
-                        {item.origin ?? ""}
-                      </div>
-                    </div>
-                  )}
-                  {layout !== "narrow" && (
                     <div role="gridcell" className="min-w-0">
-                      <VersionCell item={item} />
+                      <div className="flex items-center gap-2">
+                        <KindIcon kind={item.kind} className="size-4" />
+                        <span className="truncate font-medium">{item.name}</span>
+                        {item.enabled === false && (
+                          <span className="rounded border border-border-strong px-1.5 text-[11px] text-muted">Disabled</span>
+                        )}
+                        <span className="sr-only">{item.kind}</span>
+                      </div>
+                      <p className="truncate pl-6 text-xs text-muted">{item.description ?? "No description"}</p>
                     </div>
-                  )}
-                  <div role="gridcell" className="min-w-0">
-                    <StatusBadge status={item.status} checking={busy === "checking"} title={item.statusDetail} />
+                    {layout === "wide" && (
+                      <div role="gridcell" className="min-w-0 text-[13px]">
+                        <div className="truncate">{sourceLabel[item.source]}</div>
+                        <div className="truncate font-mono text-[11px] text-muted" title={item.origin ?? undefined}>
+                          {item.origin ?? ""}
+                        </div>
+                      </div>
+                    )}
+                    {layout !== "narrow" && (
+                      <div role="gridcell" className="min-w-0">
+                        <VersionCell item={item} />
+                      </div>
+                    )}
+                    <div role="gridcell" className="min-w-0">
+                      <StatusBadge status={item.status} checking={busy === "checking"} title={item.statusDetail} />
+                    </div>
+                    {layout === "wide" && (
+                      <div role="gridcell" className="text-xs text-muted" title={item.updatedAt ?? item.installedAt ?? undefined}>
+                        {relativeTime(item.updatedAt ?? item.installedAt)}
+                      </div>
+                    )}
                   </div>
-                  {layout === "wide" && (
-                    <div role="gridcell" className="text-xs text-muted" title={item.updatedAt ?? item.installedAt ?? undefined}>
-                      {relativeTime(item.updatedAt ?? item.installedAt)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <footer className="flex h-8 shrink-0 items-center gap-4 border-t border-border bg-surface px-4 text-xs text-muted">

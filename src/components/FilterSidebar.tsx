@@ -131,7 +131,7 @@ export function FilterSidebar() {
   const set = (f: Partial<Filters>) => setFilters(f);
 
   return (
-    <aside aria-label="Filters" className="flex w-[232px] shrink-0 flex-col border-r border-border bg-surface">
+    <aside aria-label="Filters" className="flex w-[216px] shrink-0 flex-col pl-3">
       <div className="flex h-11 items-center justify-between px-4">
         <h2 className="text-[13px] font-semibold">Filters</h2>
         {active > 0 && (

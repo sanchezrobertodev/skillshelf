@@ -7,7 +7,7 @@ import { canToggle, canUninstall, canUpdate, fullDate, kindLabel, sourceHelp, so
 import { useStore } from "../store";
 import type { Child, Item } from "../types";
 import { ChangelogPanel } from "./Changelog";
-import { Button, IconButton, KindIcon, StatusBadge } from "./ui";
+import { Button, card, IconButton, KindIcon, StatusBadge } from "./ui";
 
 const childMeta: Record<Child["kind"], { label: string; icon: typeof Bot }> = {
   skill: { label: "Skills", icon: ScrollText },
@@ -60,8 +60,9 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
     <aside
       aria-label={`${item.name} details`}
       className={clsx(
-        "flex w-[380px] shrink-0 flex-col border-l border-border bg-surface",
-        overlay && "absolute inset-y-0 right-0 z-30 shadow-2xl",
+        "flex w-[380px] shrink-0 flex-col overflow-hidden",
+        card,
+        overlay && "absolute top-0 right-5 bottom-4 z-30 shadow-2xl",
       )}
     >
       <div className="flex items-start gap-3 border-b border-border px-5 py-4">
