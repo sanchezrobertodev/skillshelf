@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, Clock, LoaderCircle, ShieldQuestion } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleSlash, Clock, LoaderCircle, ShieldQuestion, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
 import type { Action, Job } from "../types";
@@ -19,6 +19,7 @@ const stateMeta: Record<Job["state"], { label: string; icon: typeof Clock; cls: 
   success: { label: "Done", icon: CircleCheck, cls: "text-accent" },
   failed: { label: "Failed", icon: CircleAlert, cls: "text-danger" },
   needsConfirmation: { label: "Needs review", icon: ShieldQuestion, cls: "text-warn" },
+  cancelled: { label: "Stopped", icon: CircleSlash, cls: "text-muted" },
 };
 
 function JobRow({ job }: { job: Job }) {
@@ -77,6 +78,8 @@ export function QueueDrawer() {
   const open = useStore((s) => s.queueOpen);
   const setOpen = useStore((s) => s.setQueueOpen);
   const clear = useStore((s) => s.clearFinishedJobs);
+  const stop = useStore((s) => s.stop);
+  const batchFrom = useStore((s) => s.batchFrom);
   const attention = (j: Job) => (j.state === "failed" || j.state === "needsConfirmation" ? 0 : 1);
   const list = Object.values(jobs).sort((a, b) => attention(a) - attention(b) || b.jobId - a.jobId);
   if (!list.length) return null;
@@ -84,6 +87,8 @@ export function QueueDrawer() {
   const active = list.filter((j) => j.state === "queued" || j.state === "running").length;
   const failed = list.filter((j) => j.state === "failed").length;
   const done = list.filter((j) => j.state === "success").length;
+  const batch = list.filter((j) => j.jobId >= batchFrom);
+  const batchDone = batch.length - batch.filter((j) => j.state === "queued" || j.state === "running").length;
 
   return (
     <section aria-label="Action queue" className={clsx("mx-5 mb-4 shrink-0 overflow-hidden", card)}>
@@ -101,15 +106,41 @@ export function QueueDrawer() {
           {active > 0 && (
             <span className="flex items-center gap-1 text-info">
               <LoaderCircle aria-hidden className="size-3.5 animate-spin" />
-              {active} running
+              {active} left
             </span>
           )}
           {done > 0 && <span>{done} done</span>}
           {failed > 0 && <span className="text-danger">{failed} failed</span>}
         </span>
-        <Button size="sm" variant="ghost" className="ml-auto" disabled={active === list.length} onClick={clear}>
-          Clear finished
-        </Button>
+        {active > 0 && batch.length > 1 && (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted">
+            <span className="shrink-0 tabular-nums">
+              {Math.min(batchDone + 1, batch.length)} of {batch.length}
+            </span>
+            <div
+              role="progressbar"
+              aria-label="Batch progress"
+              aria-valuemin={0}
+              aria-valuemax={batch.length}
+              aria-valuenow={batchDone}
+              aria-valuetext={`${batchDone} of ${batch.length} finished`}
+              className="h-1.5 max-w-48 flex-1 overflow-hidden rounded-full bg-border"
+            >
+              <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${(batchDone / batch.length) * 100}%` }} />
+            </div>
+          </div>
+        )}
+        <span className="ml-auto flex items-center gap-1">
+          {active > 0 && (
+            <Button size="sm" variant="secondary" onClick={() => void stop()}>
+              <Square aria-hidden className="size-3 fill-current" />
+              Stop
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" disabled={active === list.length} onClick={clear}>
+            Clear finished
+          </Button>
+        </span>
       </div>
       {open && <ul className="max-h-64 overflow-y-auto border-t border-border">{list.map((j) => <JobRow key={j.jobId} job={j} />)}</ul>}
     </section>

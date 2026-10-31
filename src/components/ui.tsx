@@ -140,6 +140,50 @@ export function Checkbox({
   );
 }
 
+/** On/off toggle. Inside the list grid it's skipped by Tab like the row checkboxes; the row's menu has the same action. */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+  tabIndex,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  disabled?: boolean;
+  tabIndex?: number;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      tabIndex={tabIndex}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      className={clsx(
+        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-150",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "border-accent bg-accent" : "border-border-strong bg-surface-2",
+      )}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          "size-3.5 rounded-full shadow-sm transition-transform duration-150 motion-reduce:transition-none",
+          checked ? "translate-x-[18px] bg-accent-fg" : "translate-x-[2px] bg-muted",
+        )}
+      />
+    </button>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd className="rounded border border-border-strong bg-surface-2 px-1.5 py-px font-mono text-[11px] text-muted">
@@ -162,11 +206,15 @@ export function Modal({
   wide?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  // Callers pass a new onClose each render; a ref keeps re-renders from re-running the focus setup.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>("[data-autofocus], button, input")?.focus();
+    // Two lookups: one selector list would return whichever comes first in the DOM (the Close button).
+    (panel.current?.querySelector<HTMLElement>("[data-autofocus]") ?? panel.current?.querySelector<HTMLElement>("button, input"))?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close.current();
       if (e.key === "Tab" && panel.current) {
         const f = [...panel.current.querySelectorAll<HTMLElement>("button, input, a[href], [tabindex='0']")].filter(
           (el) => !el.hasAttribute("disabled"),
@@ -188,7 +236,7 @@ export function Modal({
       window.removeEventListener("keydown", onKey);
       prev?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onMouseDown={onClose}>

@@ -1,94 +1,12 @@
-import { Download, FolderPlus, LoaderCircle, Trash2, TriangleAlert, X } from "lucide-react";
+import { FolderPlus, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorText } from "../api";
-import { changelogCounts, isEmpty, newestChange, useChangelog } from "../lib/changelog";
 import { formatBytes, sourceLabel, uninstallEffect } from "../lib/format";
 import { useStore } from "../store";
 import type { Environment, Item, Job } from "../types";
 import { AppUpdateSettings } from "./AppUpdate";
+import { ReviewSheet } from "./ReviewSheet";
 import { Button, IconButton, KindIcon, Modal } from "./ui";
-
-/** Changelog summaries are looked up for this many items at most, to go easy on the GitHub rate limit. */
-const SUMMARIES = 10;
-
-function UpdateSummary({ item, enabled }: { item: Item; enabled: boolean }) {
-  const { state } = useChangelog(item, enabled);
-  if (state.status === "idle" && !enabled) return <p className="text-xs text-muted">Open the item to see what changed.</p>;
-  if (state.status === "idle" || state.status === "loading")
-    return (
-      <p className="flex items-center gap-1.5 text-xs text-muted">
-        <LoaderCircle aria-hidden className="size-3 animate-spin" />
-        Looking up what changed…
-      </p>
-    );
-  if (state.status === "error") return <p className="text-xs text-muted">Couldn't load what changed.</p>;
-  if (isEmpty(state.log)) return <p className="text-xs text-muted">No changelog available.</p>;
-  const newest = newestChange(state.log);
-  return (
-    <>
-      <p className="text-xs text-muted">{changelogCounts(state.log)}</p>
-      {newest && (
-        <p className="mt-0.5 line-clamp-1 text-xs" title={newest}>
-          Latest: {newest}
-        </p>
-      )}
-    </>
-  );
-}
-
-function UpdateDialog({ items }: { items: Item[] }) {
-  const confirm = useStore((s) => s.confirm);
-  const run = useStore((s) => s.run);
-  const close = () => confirm(null);
-  const many = items.length > 1;
-  return (
-    <Modal
-      wide
-      title={many ? `Update ${items.length} items?` : `Update ${items[0].name}?`}
-      onClose={close}
-      footer={
-        <>
-          <Button onClick={close}>Cancel</Button>
-          <Button
-            data-autofocus
-            variant="primary"
-            onClick={() => {
-              close();
-              void run(items.map((i) => ({ itemId: i.id, action: "update" as const })));
-            }}
-          >
-            <Download aria-hidden className="size-4" />
-            Update{many ? ` ${items.length}` : ""}
-          </Button>
-        </>
-      }
-    >
-      <ul className="divide-y divide-border rounded-md border border-border">
-        {items.map((i, idx) => (
-          <li key={i.id} className="flex gap-3 px-3 py-2.5">
-            <KindIcon kind={i.kind} className="mt-0.5 size-4" />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] font-medium">
-                <span className="truncate">{i.name}</span>
-                <span className="font-mono text-xs font-normal text-muted">
-                  {i.version ?? "?"} → {i.latest ?? "latest"}
-                </span>
-              </div>
-              {i.status === "updateAvailable" ? (
-                <UpdateSummary item={i} enabled={idx < SUMMARIES} />
-              ) : (
-                <p className="text-xs text-muted">No update was detected; this runs the update anyway.</p>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-      {items.some((i) => i.kind === "plugin") && (
-        <p className="mt-3 text-xs text-muted">Restart Claude Code afterwards so it loads the updated plugins.</p>
-      )}
-    </Modal>
-  );
-}
 
 function UninstallDialog({ items }: { items: Item[] }) {
   const confirm = useStore((s) => s.confirm);
@@ -206,7 +124,7 @@ export function ConfirmDialogs() {
   if (!confirmation) return null;
   switch (confirmation.type) {
     case "update":
-      return <UpdateDialog items={confirmation.items} />;
+      return <ReviewSheet items={confirmation.items} />;
     case "uninstall":
       return <UninstallDialog items={confirmation.items} />;
     case "command":
@@ -302,9 +220,9 @@ export function SettingsDialog() {
             className="mt-0.5 size-4 accent-[var(--accent)]"
           />
           <span>
-            <span className="block text-[13px] font-semibold">Check for updates on launch</span>
+            <span className="block text-[13px] font-semibold">Check for updates on launch and once a day</span>
             <span className="block text-xs text-muted">
-              Refreshes marketplace catalogs and asks GitHub for the latest skill versions.
+              Refreshes marketplace catalogs and asks GitHub for the latest skill versions. The daily check keeps running while Skillshelf is in the tray, and new updates show a notification once.
             </span>
           </span>
         </label>

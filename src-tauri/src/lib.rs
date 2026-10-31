@@ -7,6 +7,7 @@ mod paths;
 mod proc;
 mod scan;
 mod settings;
+mod tray;
 mod updates;
 mod usage;
 
@@ -15,9 +16,12 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 
 use actions::{ActionRequest, Finished, JobEvent, JobState, LastRun};
@@ -35,6 +39,12 @@ struct AppState {
     next_job: AtomicU64,
     last_runs: Mutex<HashMap<String, LastRun>>,
     last_runs_file: PathBuf,
+    /// Bumped by Stop: jobs queued under an older value are cancelled.
+    cancel: tokio::sync::watch::Sender<u64>,
+    /// When the last update check finished (ms), for the daily check.
+    last_check: AtomicU64,
+    /// Updates already announced, so each gets one notification.
+    announced_file: PathBuf,
 }
 
 impl AppState {
@@ -66,11 +76,25 @@ async fn scan(state: State<'_, AppState>) -> Result<ScanResult, String> {
 }
 
 #[tauri::command]
-async fn check_updates(state: State<'_, AppState>) -> Result<CheckResult, String> {
+async fn check_updates(app: AppHandle, state: State<'_, AppState>) -> Result<CheckResult, String> {
     let items = state.items.lock().unwrap().clone();
     let result = updates::check_all(items).await;
     *state.items.lock().unwrap() = result.items.clone();
+    state.last_check.store(now_ms(), Ordering::Relaxed);
+    tray::announce(&app, &result.items, &state.announced_file);
     Ok(result)
+}
+
+/// Cancels the running job and skips every job queued so far.
+#[tauri::command]
+fn stop_actions(state: State<'_, AppState>) {
+    state.cancel.send_modify(|g| *g += 1);
+}
+
+/// The UI's summary for the tray menu and the window title.
+#[tauri::command]
+fn update_tray(app: AppHandle, summary: tray::TrayState) -> Result<(), String> {
+    tray::update(&app, &summary).map_err(|e| e.to_string())
 }
 
 #[derive(Serialize)]
@@ -111,10 +135,12 @@ async fn run_actions(
             item_id: item.id.clone(),
         });
 
+        let generation = *state.cancel.borrow();
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
             let _guard = state.action_lock.lock().await;
+            let mut stop = state.cancel.subscribe();
             let emit = |state: JobState, line: Option<String>, message: Option<String>, confirm| {
                 let _ = app.emit(
                     "job",
@@ -129,20 +155,26 @@ async fn run_actions(
             };
             let mut lines = Vec::new();
             let finished = match plan {
+                _ if *stop.borrow() != generation => None,
                 Ok(plan) => {
                     emit(JobState::Running, None, None, None);
-                    actions::execute(plan, |l| {
+                    let run = actions::execute(plan, |l| {
                         lines.push(l.to_string());
                         emit(JobState::Log, Some(l.to_string()), None, None)
-                    })
-                    .await
+                    });
+                    // Dropping the run kills its process (kill_on_drop).
+                    tokio::select! {
+                        f = run => Some(f),
+                        _ = stop.wait_for(|g| *g != generation) => None,
+                    }
                 }
-                Err(e) => Finished::Failed(e),
+                Err(e) => Some(Finished::Failed(e)),
             };
             let (job_state, message, confirm) = match finished {
-                Finished::Success(m) => (JobState::Success, m, None),
-                Finished::Failed(m) => (JobState::Failed, Some(m), None),
-                Finished::NeedsConfirmation(c, m) => (JobState::NeedsConfirmation, m, Some(c)),
+                Some(Finished::Success(m)) => (JobState::Success, m, None),
+                Some(Finished::Failed(m)) => (JobState::Failed, Some(m), None),
+                Some(Finished::NeedsConfirmation(c, m)) => (JobState::NeedsConfirmation, m, Some(c)),
+                None => (JobState::Cancelled, Some("Stopped".to_string()), None),
             };
             lines.drain(..lines.len().saturating_sub(actions::MAX_LOG_LINES));
             state.remember_run(
@@ -325,11 +357,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
+        // With a tray icon, closing the window hides it so daily checks keep running. Quit from the tray.
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && tray::has_tray(window.app_handle())
+            {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             let settings_file = app.path().app_config_dir()?.join("settings.json");
             let data_dir = app.path().app_data_dir()?;
             let _ = std::fs::create_dir_all(&data_dir);
             let last_runs_file = data_dir.join("last-runs.json");
+            let announced_file = data_dir.join("announced.json");
             let last_runs = scan::read_json(&last_runs_file)
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default();
@@ -342,7 +385,14 @@ pub fn run() {
                 next_job: AtomicU64::new(1),
                 last_runs: Mutex::new(last_runs),
                 last_runs_file,
+                cancel: tokio::sync::watch::channel(0).0,
+                last_check: AtomicU64::new(0),
+                announced_file,
             });
+            if let Err(e) = tray::create(app.handle()) {
+                eprintln!("No tray icon ({e}); closing the window will quit.");
+            }
+            daily_checks(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -357,12 +407,39 @@ pub fn run() {
             usage,
             item_readme,
             last_runs,
+            stop_actions,
+            update_tray,
             get_settings,
             save_settings,
             environment
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // macOS: clicking the Dock icon brings the hidden window back.
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { .. } = _event {
+                tray::show_main(_app);
+            }
+        });
+}
+
+/// Asks the UI to rescan and check once a day after the last check. Hourly ticks, compared with the
+/// wall clock, so a sleeping laptop catches up when it wakes.
+fn daily_checks(app: AppHandle) {
+    const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            tick.tick().await;
+            let state = app.state::<AppState>();
+            let last = state.last_check.load(Ordering::Relaxed);
+            let auto = state.settings.lock().unwrap().auto_check;
+            if auto && last != 0 && now_ms().saturating_sub(last) >= DAY_MS {
+                let _ = app.emit("scheduled-check", ());
+            }
+        }
+    });
 }
 
 #[cfg(test)]
