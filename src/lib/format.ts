@@ -61,6 +61,18 @@ export function fullDate(iso: string | null | undefined): string {
   return Number.isNaN(t) ? iso : new Date(t).toLocaleString();
 }
 
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB"];
+  let v = n / 1024;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
+}
+
 export function canUpdate(i: Item) {
   return i.source === "marketplace" || i.source === "skillsCli";
 }
@@ -76,7 +88,7 @@ export function canUninstall(i: Item) {
 export function uninstallEffect(i: Item): string {
   switch (i.source) {
     case "marketplace":
-      return "Runs claude plugin uninstall. The plugin's saved data folder is removed too.";
+      return "Runs claude plugin uninstall.";
     case "skillsCli":
       return "Unlinks it from Claude Code with the skills CLI. Other agents that share it keep their copy.";
     case "local":

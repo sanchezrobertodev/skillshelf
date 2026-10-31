@@ -30,6 +30,9 @@ pub struct ActionRequest {
     pub action: Action,
     /// sha256 of a marketplace-declared install command the user has reviewed and accepted.
     pub accept_command: Option<String>,
+    /// Uninstall only: also delete the plugin's saved data. Kept unless the user ticked this.
+    #[serde(default)]
+    pub delete_data: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -161,6 +164,10 @@ fn plugin_plan(item: &Item, req: &ActionRequest) -> Result<Plan, String> {
         }
         args.extend(["--accept-command".into(), sha.clone()]);
     }
+    // The CLI deletes the data folder by default; an empty one can go, anything in it stays unless asked.
+    if req.action == Action::Uninstall && item.data_bytes.is_some() && !req.delete_data {
+        args.push("--keep-data".into());
+    }
     let cwd = project_path
         .clone()
         .filter(|_| matches!(scope.as_str(), "project" | "local"));
@@ -274,7 +281,28 @@ mod tests {
             item_id: String::new(),
             action,
             accept_command: None,
+            delete_data: false,
         }
+    }
+
+    #[test]
+    fn uninstall_keeps_saved_data_unless_asked() {
+        let uninstall = |data: Option<u64>, delete_data: bool| {
+            let mut item = plugin("user", Source::Marketplace);
+            item.data_bytes = data;
+            let r = ActionRequest {
+                delete_data,
+                ..req(Action::Uninstall)
+            };
+            let Plan::Cli { args, .. } = plan(&item, &r).unwrap() else {
+                panic!()
+            };
+            args.contains(&"--keep-data".to_string())
+        };
+        assert!(uninstall(Some(0), false), "an empty file still counts as data");
+        assert!(uninstall(Some(2048), false));
+        assert!(!uninstall(Some(2048), true));
+        assert!(!uninstall(None, false), "an empty folder isn't worth asking about");
     }
 
     #[test]

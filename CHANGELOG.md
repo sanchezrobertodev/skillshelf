@@ -15,6 +15,11 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 ### Changed
 
 - Updates now ask for confirmation first, with a short summary of what's new for each item.
+- Uninstalling a plugin keeps its saved data (settings, caches, downloads) unless you tick **Also delete saved data** in the confirmation. The option only appears when the plugin has data. Before, the data was always deleted.
+
+### Fixed
+
+- A skill in a very large repo no longer shows as removed upstream when GitHub can't list the repo and the fallback lookup fails. It now says why it couldn't be checked.
 
 ### Notes
 

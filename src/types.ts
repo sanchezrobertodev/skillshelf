@@ -30,6 +30,8 @@ export interface Item {
   children: Child[];
   notes: string[];
   meta: Record<string, string>;
+  /** Plugins only: size of the plugin's saved data folder; null when it's missing or empty. */
+  dataBytes: number | null;
 }
 
 export interface ScanResult {
@@ -50,6 +52,8 @@ export interface ActionRequest {
   itemId: string;
   action: Action;
   acceptCommand?: string;
+  /** Uninstall only: also delete the plugin's saved data. */
+  deleteData?: boolean;
 }
 
 export type JobState = "queued" | "running" | "log" | "success" | "failed" | "needsConfirmation";
