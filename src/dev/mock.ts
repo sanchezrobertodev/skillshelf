@@ -16,6 +16,7 @@ import type {
   Risk,
   ScanResult,
   Settings,
+  TraySummary,
   Usage,
   UsageProgress,
   UsageReport,
@@ -28,6 +29,8 @@ const lastRuns: Record<string, LastRun> = {};
 let items: Item[] = [];
 let settings: Settings = { projects: [], autoCheck: true };
 let job = 1;
+/** Set by Stop; jobs that haven't finished yet end as cancelled. */
+let stopped = false;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Fills fields an older snapshot doesn't have, and marks two skills moved/removed upstream so those states show. */
@@ -213,26 +216,35 @@ export const mockApi = {
     items = items.map((i) => checked.find((c) => c.id === i.id) ?? i);
     return { items, warnings: [], checkedAt: Date.now() };
   },
-  runActions: async (requests: ActionRequest[]) =>
-    requests.map((r) => {
+  // Jobs run one after another, 1.2 s each, like the real queue.
+  runActions: async (requests: ActionRequest[]) => {
+    stopped = false;
+    return requests.map((r, n) => {
       const item = items.find((i) => i.id === r.itemId)!;
       const base = { jobId: job++, itemId: item.id, itemName: item.name, action: r.action, line: null, message: null, confirm: null };
       const emit = (e: Partial<JobEvent>, ms: number) =>
-        setTimeout(() => listeners.forEach((l) => l({ ...base, state: "queued", ...e })), ms);
+        setTimeout(() => {
+          const ending = e.state === "success" || e.state === "failed";
+          const event = stopped && ending ? { state: "cancelled" as const, message: "Stopped" } : e;
+          if (stopped && (e.state === "running" || e.state === "log")) return;
+          listeners.forEach((l) => l({ ...base, state: "queued", ...event }));
+        }, ms);
+      const start = n * 1200;
       emit({ state: "queued" }, 0);
-      emit({ state: "running" }, 300);
-      emit({ state: "log", line: `mock: ${r.action} ${item.name}` }, 600);
+      emit({ state: "running" }, start + 100);
+      emit({ state: "log", line: `mock: ${r.action} ${item.name}` }, start + 500);
       const fails = item.name.includes("runpod");
-      emit(fails ? { state: "failed", message: "Mock failure" } : { state: "success", message: "Done (mock)" }, 1200);
+      emit(fails ? { state: "failed", message: "Mock failure" } : { state: "success", message: "Done (mock)" }, start + 1200);
       lastRuns[item.id] = {
         action: r.action,
         state: fails ? "failed" : "success",
         message: fails ? "Mock failure" : "Done (mock)",
         lines: [`mock: ${r.action} ${item.name}`],
-        finishedAt: Date.now() + 1200,
+        finishedAt: Date.now() + start + 1200,
       };
       return { jobId: base.jobId, itemId: item.id };
-    }),
+    });
+  },
   openFolder: async () => {},
   openRepo: async () => {},
   changelog: async (itemId: string): Promise<Changelog> => {
@@ -302,6 +314,15 @@ export const mockApi = {
     return { file: item.kind === "skill" ? "SKILL.md" : "README.md", text: body, truncated: false };
   },
   lastRuns: async () => lastRuns,
+  stopActions: async () => {
+    stopped = true;
+  },
+  // No tray in the browser; the title shows what the window title would.
+  updateTray: async (s: TraySummary) => {
+    document.title = s.tokens ? `Skillshelf — ≈${Math.round(s.tokens / 1000)}k tokens per session` : "Skillshelf";
+  },
+  onTray: async () => () => {},
+  onScheduledCheck: async () => () => {},
   getSettings: async () => settings,
   saveSettings: async (s: Settings) => {
     settings = s;

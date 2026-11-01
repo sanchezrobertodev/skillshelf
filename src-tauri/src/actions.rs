@@ -46,6 +46,8 @@ pub enum JobState {
     Success,
     Failed,
     NeedsConfirmation,
+    /// Stopped before it finished, or skipped because Stop was pressed while it waited.
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize)]

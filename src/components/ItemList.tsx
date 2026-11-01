@@ -1,30 +1,32 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, FilterX, Power, PowerOff, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { canToggle, canUninstall, canUpdate, relativeTime, sourceLabel } from "../lib/format";
 import type { SortKey } from "../lib/prefs";
 import { useStore } from "../store";
 import type { Item } from "../types";
-import { Button, card, Checkbox, KindIcon, StatusBadge } from "./ui";
+import { ContextMenu, type MenuTarget } from "./ContextMenu";
+import { Button, card, Checkbox, KindIcon, StatusBadge, Switch } from "./ui";
 
-type Layout = "wide" | "medium" | "narrow";
+type Layout = "full" | "wide" | "medium" | "narrow";
 
 const templates: Record<Layout, string> = {
-  wide: "40px minmax(220px,1fr) 136px 172px 152px 92px",
-  medium: "40px minmax(200px,1fr) 172px 152px",
-  narrow: "40px minmax(160px,1fr) 152px",
+  full: "40px minmax(220px,1fr) 136px 172px 152px 92px 76px",
+  wide: "40px minmax(190px,1fr) 136px 172px 152px 76px",
+  medium: "40px minmax(180px,1fr) 172px 152px 76px",
+  narrow: "40px minmax(160px,1fr) 152px 76px",
 };
 
 const ROW_HEIGHT = 52;
 
 function useLayout(ref: React.RefObject<HTMLElement | null>): Layout {
-  const [layout, setLayout] = useState<Layout>("wide");
+  const [layout, setLayout] = useState<Layout>("full");
   useEffect(() => {
     if (!ref.current) return;
     const ro = new ResizeObserver(([e]) => {
       const w = e.contentRect.width;
-      setLayout(w >= 860 ? "wide" : w >= 640 ? "medium" : "narrow");
+      setLayout(w >= 1000 ? "full" : w >= 860 ? "wide" : w >= 700 ? "medium" : "narrow");
     });
     ro.observe(ref.current);
     return () => ro.disconnect();
@@ -70,6 +72,41 @@ function VersionCell({ item }: { item: Item }) {
             {item.latest}
           </span>
         </>
+      )}
+    </div>
+  );
+}
+
+/** The Enabled switch and an Update button, so the common actions don't need the details panel. */
+function RowActions({ item, busy }: { item: Item; busy: boolean }) {
+  const run = useStore((s) => s.run);
+  const confirm = useStore((s) => s.confirm);
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {item.status === "updateAvailable" && canUpdate(item) && (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`Update ${item.name}`}
+          title={`Update ${item.name}`}
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            confirm({ type: "update", items: [item] });
+          }}
+          className="inline-flex size-8 items-center justify-center rounded-lg bg-warn/12 text-warn transition-colors duration-150 hover:enabled:bg-warn/22 disabled:opacity-50"
+        >
+          <Download aria-hidden className="size-4" />
+        </button>
+      )}
+      {canToggle(item) && (
+        <Switch
+          tabIndex={-1}
+          label={`${item.name} enabled`}
+          checked={item.enabled !== false}
+          disabled={busy}
+          onChange={() => void run([{ itemId: item.id, action: item.enabled === false ? "enable" : "disable" }])}
+        />
       )}
     </div>
   );
@@ -159,6 +196,13 @@ export function ItemList({ rows }: { rows: Item[] }) {
   const setSelected = useStore((s) => s.setSelected);
   const clearFilters = useStore((s) => s.clearFilters);
   const closeDetail = useStore((s) => s.closeDetail);
+  const jobs = useStore((s) => s.jobs);
+  const busyIds = useMemo(
+    () => new Set(Object.values(jobs).filter((j) => j.state === "queued" || j.state === "running").map((j) => j.itemId)),
+    [jobs],
+  );
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   const wrap = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -175,6 +219,11 @@ export function ItemList({ rows }: { rows: Item[] }) {
   const activeIndex = rows.findIndex((r) => r.id === activeId);
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const allSelected = rows.length > 0 && selectedRows.length === rows.length;
+
+  const openMenu = (item: Item, x: number, y: number) => {
+    setActive(item.id, false);
+    setMenu({ x, y, items: selected.has(item.id) ? selectedRows : [item] });
+  };
 
   const move = (index: number) => {
     const i = Math.max(0, Math.min(rows.length - 1, index));
@@ -232,6 +281,15 @@ export function ItemList({ rows }: { rows: Item[] }) {
           setSelected(rows.map((r) => r.id));
         }
         break;
+      case "F10":
+      case "ContextMenu":
+        if (e.key === "F10" && !e.shiftKey) break;
+        handled();
+        if (cur >= 0) {
+          const r = document.getElementById(`row-${rows[cur].id}`)?.getBoundingClientRect();
+          if (r) openMenu(rows[cur], r.left + 48, r.bottom - 8);
+        }
+        break;
     }
   };
 
@@ -264,10 +322,13 @@ export function ItemList({ rows }: { rows: Item[] }) {
             />
           </div>
           <SortHeader label="Name" k="name" />
-          {layout === "wide" && <SortHeader label="Source" k="source" />}
+          {(layout === "full" || layout === "wide") && <SortHeader label="Source" k="source" />}
           {layout !== "narrow" && <SortHeader label="Version" k="version" />}
           <SortHeader label="Status" k="status" />
-          {layout === "wide" && <SortHeader label="Updated" k="updated" />}
+          {layout === "full" && <SortHeader label="Updated" k="updated" />}
+          <div role="columnheader" className="text-right text-xs font-semibold tracking-wide text-muted uppercase">
+            <span className="sr-only">Actions</span>
+          </div>
         </div>
 
         <div ref={scroller} role="rowgroup" className="relative min-h-0 flex-1 overflow-y-auto">
@@ -302,6 +363,10 @@ export function ItemList({ rows }: { rows: Item[] }) {
                     aria-rowindex={v.index + 2}
                     aria-selected={isSelected}
                     onClick={() => setActive(item.id, true)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      openMenu(item, e.clientX, e.clientY);
+                    }}
                     className={clsx(
                       "absolute inset-x-0 grid cursor-pointer items-center gap-3 border-b border-border px-4 transition-colors duration-100",
                       isActive ? "bg-surface-2 shadow-[inset_3px_0_0_var(--accent)]" : isSelected ? "bg-accent/6" : "hover:bg-surface-hover",
@@ -322,7 +387,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
                       </div>
                       <p className="truncate pl-6 text-xs text-muted">{item.description ?? "No description"}</p>
                     </div>
-                    {layout === "wide" && (
+                    {(layout === "full" || layout === "wide") && (
                       <div role="gridcell" className="min-w-0 text-[13px]">
                         <div className="truncate">{sourceLabel[item.source]}</div>
                         <div className="truncate font-mono text-[11px] text-muted" title={item.origin ?? undefined}>
@@ -338,11 +403,14 @@ export function ItemList({ rows }: { rows: Item[] }) {
                     <div role="gridcell" className="min-w-0">
                       <StatusBadge status={item.status} checking={busy === "checking"} title={item.statusDetail} />
                     </div>
-                    {layout === "wide" && (
+                    {layout === "full" && (
                       <div role="gridcell" className="text-xs text-muted" title={item.updatedAt ?? item.installedAt ?? undefined}>
                         {relativeTime(item.updatedAt ?? item.installedAt)}
                       </div>
                     )}
+                    <div role="gridcell">
+                      <RowActions item={item} busy={busyIds.has(item.id)} />
+                    </div>
                   </div>
                 );
               })}
@@ -355,8 +423,9 @@ export function ItemList({ rows }: { rows: Item[] }) {
         <span>
           Showing {rows.length} of {total}
         </span>
-        <span className="hidden md:inline">↑↓ move · Space select · Enter details · Ctrl A select all</span>
+        <span className="hidden md:inline">↑↓ move · Space select · Enter details · Shift F10 actions · Ctrl A select all</span>
       </footer>
+      {menu && <ContextMenu target={menu} onClose={closeMenu} />}
     </section>
   );
 }

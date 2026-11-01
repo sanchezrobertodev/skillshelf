@@ -97,7 +97,7 @@ export interface ActionRequest {
   deleteData?: boolean;
 }
 
-export type JobState = "queued" | "running" | "log" | "success" | "failed" | "needsConfirmation";
+export type JobState = "queued" | "running" | "log" | "success" | "failed" | "needsConfirmation" | "cancelled";
 
 export interface JobEvent {
   jobId: number;
@@ -224,6 +224,16 @@ export interface Readme {
   /** Markdown, without front matter. */
   text: string;
   truncated: boolean;
+}
+
+/** What the tray menu and window title show; sent to the backend whenever it changes. */
+export interface TraySummary {
+  /** [item id, name] of each pending update. */
+  updates: [string, string][];
+  checking: boolean;
+  tokens: number | null;
+  unused: number | null;
+  appUpdate: string | null;
 }
 
 export interface LastRun {

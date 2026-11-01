@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { api, errorText } from "./api";
+import { useAppUpdate } from "./appUpdate";
+import { canUpdate } from "./lib/format";
+import { isUnused, sessionTokens } from "./lib/insights";
 import { applyTheme, emptyFilters, loadPrefs, savePrefs, type Filters, type Prefs, type SortKey, type Theme } from "./lib/prefs";
-import type { ActionRequest, Item, Job, JobEvent, Settings } from "./types";
+import type { ActionRequest, Item, Job, JobEvent, Settings, TraySummary, Usage, UsageProgress } from "./types";
 
 export type Busy = "idle" | "scanning" | "checking";
 export type Screen = "overview" | "library" | "cleanup" | "mcp";
@@ -23,7 +26,12 @@ interface State extends Prefs {
   activeId: string | null;
   detailOpen: boolean;
   jobs: Record<number, Job>;
+  /** First job of the current batch: jobs queued while nothing else was running start a new one. */
+  batchFrom: number;
   queueOpen: boolean;
+  /** Uses per item id from local transcripts; null until the first count finishes. */
+  usage: Record<string, Usage> | null;
+  usageProgress: UsageProgress | null;
   restartNeeded: boolean;
   confirmation: Confirmation | null;
   settings: Settings;
@@ -34,6 +42,8 @@ interface State extends Prefs {
   refresh: (opts?: { check?: boolean }) => Promise<void>;
   checkUpdates: () => Promise<void>;
   run: (requests: ActionRequest[]) => Promise<void>;
+  stop: () => Promise<void>;
+  loadUsage: () => Promise<void>;
   onJob: (e: JobEvent) => void;
   setQuery: (q: string) => void;
   setFilters: (f: Partial<Filters>) => void;
@@ -55,6 +65,19 @@ interface State extends Prefs {
 }
 
 const prefs = loadPrefs();
+let lastTray = "";
+
+export const updatable = (items: Item[]) => items.filter((i) => i.status === "updateAvailable" && canUpdate(i));
+
+function traySummary(s: State): TraySummary {
+  return {
+    updates: updatable(s.items).map((i) => [i.id, i.name]),
+    checking: s.busy === "checking",
+    tokens: s.items.length ? sessionTokens(s.items) : null,
+    unused: s.usage ? s.items.filter((i) => isUnused(i, s.usage)).length : null,
+    appUpdate: useAppUpdate.getState().update?.version ?? null,
+  };
+}
 /** Set when an action finished; the list is rescanned once the queue drains. */
 let refreshAfterQueue = false;
 
@@ -77,7 +100,10 @@ export const useStore = create<State>((set, get) => {
     activeId: null,
     detailOpen: false,
     jobs: {},
+    batchFrom: 0,
     queueOpen: false,
+    usage: null,
+    usageProgress: null,
     restartNeeded: false,
     confirmation: null,
     settings: { projects: [], autoCheck: true },
@@ -85,6 +111,27 @@ export const useStore = create<State>((set, get) => {
     screen: "library",
 
     init: async () => {
+      const syncTray = () => {
+        const summary = traySummary(get());
+        const json = JSON.stringify(summary);
+        if (json === lastTray) return;
+        lastTray = json;
+        api.updateTray(summary).catch(() => {});
+      };
+      useStore.subscribe(syncTray);
+      useAppUpdate.subscribe(syncTray);
+      void api.onUsageProgress((usageProgress) => set({ usageProgress }));
+      void api.onScheduledCheck(() => void get().refresh({ check: true }));
+      void api.onTray((id) => {
+        const s = get();
+        if (id === "check") void s.refresh({ check: true });
+        else if (id === "review-all") s.confirm({ type: "update", items: updatable(s.items) });
+        else if (id.startsWith("review:")) {
+          const item = s.items.find((i) => i.id === id.slice("review:".length));
+          if (item) s.confirm({ type: "update", items: [item] });
+        } else if (id === "overview" || id === "cleanup") s.setScreen(id);
+        else if (id === "app-update") useAppUpdate.getState().setNotesOpen(true);
+      });
       try {
         set({ settings: await api.getSettings() });
       } catch (e) {
@@ -120,7 +167,21 @@ export const useStore = create<State>((set, get) => {
         return;
       }
       set({ busy: "idle" });
+      void get().loadUsage();
       if (opts?.check ?? get().settings.autoCheck) await get().checkUpdates();
+    },
+
+    loadUsage: async () => {
+      if (get().usageProgress) return;
+      set({ usageProgress: { read: 0, total: 0 } });
+      try {
+        const r = await api.usage();
+        set({ usage: r.byItem });
+      } catch (e) {
+        set((s) => ({ warnings: [...s.warnings, `Couldn't count uses from your transcripts: ${errorText(e)}`] }));
+      } finally {
+        set({ usageProgress: null });
+      }
     },
 
     checkUpdates: async () => {
@@ -146,9 +207,19 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
+    stop: async () => {
+      try {
+        await api.stopActions();
+      } catch (e) {
+        set({ error: errorText(e) });
+      }
+    },
+
     onJob: (e) => {
       set((s) => {
         const prev = s.jobs[e.jobId];
+        const idle = !Object.values(s.jobs).some((j) => j.state === "queued" || j.state === "running");
+        const batchFrom = !prev && idle ? e.jobId : s.batchFrom;
         const job: Job = prev ?? {
           jobId: e.jobId,
           itemId: e.itemId,
@@ -168,7 +239,7 @@ export const useStore = create<State>((set, get) => {
         const restartNeeded = s.restartNeeded || (e.state === "success" && item?.kind === "plugin");
         const confirmation =
           e.state === "needsConfirmation" && !s.confirmation ? ({ type: "command", job: next } as const) : s.confirmation;
-        return { jobs: { ...s.jobs, [e.jobId]: next }, restartNeeded, confirmation };
+        return { jobs: { ...s.jobs, [e.jobId]: next }, batchFrom, restartNeeded, confirmation };
       });
 
       if (e.state === "success") refreshAfterQueue = true;

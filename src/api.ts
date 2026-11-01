@@ -16,6 +16,7 @@ import type {
   Readme,
   ScanResult,
   Settings,
+  TraySummary,
   UsageProgress,
   UsageReport,
 } from "./types";
@@ -40,6 +41,13 @@ const tauriApi = {
     listen<UsageProgress>("usage-progress", (e) => cb(e.payload)),
   readme: (itemId: string) => invoke<Readme | null>("item_readme", { itemId }),
   lastRuns: () => invoke<Record<string, LastRun>>("last_runs"),
+  /** Cancels the running job and skips the queued ones. */
+  stopActions: () => invoke<void>("stop_actions"),
+  updateTray: (summary: TraySummary) => invoke<void>("update_tray", { summary }),
+  /** Tray menu clicks that need the window: "check", "review-all", "review:<item id>", "overview", "cleanup", "app-update". */
+  onTray: (cb: (id: string) => void): Promise<UnlistenFn> => listen<string>("tray", (e) => cb(e.payload)),
+  /** Once a day after the last check, while the app runs (also when hidden to the tray). */
+  onScheduledCheck: (cb: () => void): Promise<UnlistenFn> => listen("scheduled-check", () => cb()),
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   environment: () => invoke<Environment>("environment"),
