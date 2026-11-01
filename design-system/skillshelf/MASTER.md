@@ -6,16 +6,16 @@
 ---
 
 **Project:** Skillshelf
-**Direction:** Workbench (chosen 2026-10-31, replaces the v0.1 "code dark + run green" dashboard)
-**Source:** ui-ux-pro-max: *Productivity Tool* palette (teal focus + action orange), *Minimalism & Swiss Style* structure, IBM Plex type. Colours adjusted so every text pair passes WCAG AA.
-**Dials:** Variance 3 (calm, balanced) · Motion 2 (subtle) · Density 7 (dense list, roomy chrome)
+**Direction:** Workbench "Aurora" (chosen 2026-11-01, restyles the 2026-10-31 teal Workbench, which replaced the v0.1 "code dark + run green" dashboard)
+**Source:** ui-ux-pro-max: *Aurora UI* glow and gradient, a light *Glassmorphism* card, *Minimalism & Swiss Style* structure, Geist type. Colours adjusted so every text pair passes WCAG AA.
+**Dials:** Variance 4 (calm, a little expressive) · Motion 2 (subtle) · Density 7 (dense list, roomy chrome)
 
 ---
 
 ## Principles
 
-- **A tinted canvas with floating white cards.** The window background is a soft teal-grey. Content (the list, details, overview tiles, the queue) sits on white cards with a soft shadow. In dark mode, cards get a hairline border instead, because shadows don't read on dark.
-- **Teal is for action and place.** It marks primary buttons, the active rail item, links and focus.
+- **A glowing canvas with frosted cards.** The window background has three faint glows (teal top-left, violet top-right, pink bottom-right). Content (the list, details, overview tiles, the queue) sits on frosted cards: the surface colour at 78% (72% in dark) with a 20px backdrop blur, a soft shadow and a hairline edge. The glow, the gradient and the glass belong to Workbench only; the other palettes stay flat and opaque.
+- **Violet is for action and place.** It marks the active rail item, links, switches and focus. Primary buttons use the violet-to-teal gradient with a soft violet glow.
 - **Orange means "update".** Use it only for update status, update buttons and update risk flags, so a pending update is the one warm thing on screen.
 - **Status is never colour alone.** Every chip has an icon and text. Every chart has a text alternative (`role="img"` plus `aria-label`).
 - **Components use semantic tokens only** (`bg-surface`, `text-muted`, `bg-warn`…), never raw hex.
@@ -26,44 +26,54 @@ Five palettes, each with a light and a dark block in `src/index.css` that define
 
 | Palette | Accent | Notes |
 |---|---|---|
-| Workbench | teal | Default |
+| Workbench | violet, violet-to-teal gradient | Default. Glow, gradient primary buttons and frosted cards |
 | Graphite | near-black / near-white | Monochrome, so orange updates are the only colour |
-| Indigo | indigo | Cool slate surfaces |
+| Indigo | indigo | Cool slate surfaces, flat. Close to Workbench in colour |
 | Rose | rose | Updates use amber so they stay distinct from the accent |
 | High contrast | dark blue / sky | 7:1 text, hard borders instead of shadows, inverted active rail item |
 
-`node scripts/contrast.mjs` (part of `make check` and CI) checks every text pair of every theme, including chips on their own 12% tints.
+`node scripts/contrast.mjs` (part of `make check` and CI) checks every text pair of every theme, including chips on their own 12% tints, and `--accent-fg` on every `--accent-grad` stop and halfway between stops.
 
 ## Tokens (`src/index.css`)
 
+Workbench values:
+
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--bg` | `#F2F7F7` | `#0A1413` | Window canvas |
-| `--surface` | `#FFFFFF` | `#0F1D1C` | Cards, rail, dialogs |
-| `--surface-2` | `#E8F1F1` | `#152625` | Wells, code, skeletons |
-| `--surface-hover` | `#E0ECEB` | `#1A2E2C` | Hover fill |
-| `--border` / `--border-strong` | `#D3E3E2` / `#B9D0CE` | `#1F3533` / `#2C4744` | Dividers / control outlines |
-| `--card-border` | transparent | `#1F3533` | Card edge |
-| `--fg` | `#10302D` | `#E6F2F1` | Text |
-| `--muted` | `#4B5F5D` | `#93AFAC` | Secondary text (≥5.9:1 on every surface) |
-| `--accent` (+`-hover`, `-fg`) | `#0F766E` / `#FFFFFF` | `#2DD4BF` / `#04211E` | Primary action, active, links, focus |
+| `--bg` | `#F5F6FB` | `#07081A` | Window canvas |
+| `--surface` | `#FFFFFF` | `#11132B` | Cards, rail, dialogs |
+| `--surface-2` | `#EFF0F8` | `#171A37` | Wells, code, skeletons |
+| `--surface-hover` | `#E9EBF7` | `#1E2244` | Hover fill |
+| `--border` / `--border-strong` | `#E2E4F0` / `#C9CDE2` | `#242850` / `#363C6C` | Dividers / control outlines |
+| `--card-border` | white 70% | white 7% | Card edge |
+| `--fg` | `#13142E` | `#ECEEFE` | Text |
+| `--muted` | `#545A78` | `#A4A9D0` | Secondary text |
+| `--accent` (+`-hover`, `-fg`) | `#6D28D9` / `#FFFFFF` | `#A78BFA` / `#140A32` | Active, links, focus, solid primary |
 | `--warn` (+`-hover`, `-fg`) | `#B43C0A` / `#FFFFFF` | `#FB923C` / `#1C0A02` | Updates only |
 | `--danger` | `#B91C1C` | `#F87171` | Destructive, failures |
 | `--info` | `#3B5B7A` | `#93B4D4` | Managed, neutral info |
-| `--nav-active` / `-fg` | `#D5ECE9` / `#0B5A54` | `#163733` / `#5EEAD4` | Active rail item |
-| `--card-shadow` | soft teal-tinted | deep black | Cards |
+| `--nav-active` / `-fg` | `#EDE7FD` / `#5B21B6` | `#241D4F` / `#C4B5FD` | Active rail item |
+| `--card-shadow` | soft violet-tinted | deep black | Cards |
 
-Contrast was checked with a script: text on surfaces is 5.9–16:1, button text 5.2–9.1:1, and chip text on its own 10–12% tint is 4.8–7.7:1.
+Workbench-only style tokens, read by the `[data-palette="workbench"]` rules in `src/index.css`:
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--accent-grad` | `#7C3AED` → `#5B4BE0` → `#0F766E` | `#C4B5FD` → `#A78BFA` → `#5EEAD4` | Primary buttons (`.btn-primary`), 135° |
+| `--accent-glow` | violet, 45% | lavender, 45% | Primary button shadow |
+| `--veil` | black 12% | white 16% | Laid over the gradient on hover; keeps or raises text contrast |
+| `--glass` | 78% | 72% | Card opacity (`.card`) |
+| `--glow` | teal / violet / pink, 8–18% | teal / violet / pink, 10–26% | Canvas background |
 
 ## Type
 
-- **UI:** IBM Plex Sans, 14px base, 13px in dense rows, 11px uppercase for section labels (tracking 0.06em).
-- **Code, versions, ids, paths, token counts:** JetBrains Mono, 11–12px. JetBrains Mono was already bundled, so it stays instead of Plex Mono.
+- **UI:** Geist, 14px base, 13px in dense rows, 11px uppercase for section labels (tracking 0.06em). Applies to every palette.
+- **Code, versions, ids, paths, token counts:** JetBrains Mono, 11–12px.
 - Headings are semibold with slight negative tracking. Page title 18px.
 
 ## Shape and spacing
 
-- Radius: cards 12px (`rounded-xl`), controls 8px (`rounded-lg`), chips fully rounded.
+- Radius: cards 16px (`rounded-2xl`), controls 8px (`rounded-lg`), chips fully rounded.
 - Page gutter 20px. Gaps between cards 12px. Card padding 16px (lists use 16px side padding per row).
 - Rail 80px: icon (20px) above an 11px label. The active item uses the nav-active fill.
 
@@ -86,10 +96,10 @@ Contrast was checked with a script: text on surfaces is 5.9–16:1, button text 
 
 ## Components
 
-- **Buttons:** `primary` (teal), `update` (orange, for update actions only), `secondary` (white with an outline), `ghost`, `danger` (outline). Heights 36 and 32.
+- **Buttons:** `primary` (accent; the violet-to-teal gradient on Workbench), `update` (orange, for update actions only), `secondary` (white with an outline), `ghost`, `danger` (outline). Heights 36 and 32.
 - **Status chip:** icon + label, tinted background, 1px tinted border.
 - **Charts:** inline SVG sparklines and bars in `--accent`. Each has a text alternative such as "41 uses in the last 30 days".
-- **Dialogs:** a card on a teal-tinted scrim. Focus is trapped and returns to where it was. Escape closes.
+- **Dialogs:** a card on a tinted scrim. Focus is trapped and returns to where it was. Escape closes.
 
 ## Motion
 
@@ -101,3 +111,4 @@ Contrast was checked with a script: text on surfaces is 5.9–16:1, button text 
 - Colour-only status, or icon-only buttons without `aria-label`.
 - Raw hex in components.
 - Shadows in dark mode instead of borders.
+- Glow, gradients or glass outside Workbench's own rules, or on text.

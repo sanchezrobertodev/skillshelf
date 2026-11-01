@@ -2,60 +2,78 @@
 
 /* Semantic tokens. Components use these via Tailwind (bg-surface, text-muted, …), never raw hex. */
 
-/* Workbench (design-system/skillshelf/MASTER.md): teal primary, orange for updates, soft tinted canvas with white cards.
-   Every text pair is checked at 4.5:1 or better, including chips on their own 10-12% tints. */
+/* Workbench, "Aurora" (design-system/skillshelf/MASTER.md): violet primary with a violet-to-teal gradient, orange for
+   updates, a faint glow on the canvas and frosted cards. Every text pair is checked at 4.5:1 or better, including chips
+   on their own 10-12% tints and accent-fg on every gradient stop.
+   --accent-grad, --accent-glow, --veil, --glass and --glow are only read by the Workbench rules further down. */
 :root,
 [data-palette="workbench"] {
   color-scheme: light;
-  --bg: #f2f7f7;
+  --bg: #f5f6fb;
   --surface: #ffffff;
-  --surface-2: #e8f1f1;
-  --surface-hover: #e0eceb;
-  --border: #d3e3e2;
-  --border-strong: #b9d0ce;
-  --fg: #10302d;
-  --muted: #4b5f5d;
-  --accent: #0f766e;
-  --accent-hover: #115e59;
+  --surface-2: #eff0f8;
+  --surface-hover: #e9ebf7;
+  --border: #e2e4f0;
+  --border-strong: #c9cde2;
+  --fg: #13142e;
+  --muted: #545a78;
+  --accent: #6d28d9;
+  --accent-hover: #5b21b6;
   --accent-fg: #ffffff;
   --warn: #b43c0a;
   --warn-hover: #9a330a;
   --warn-fg: #ffffff;
   --danger: #b91c1c;
   --info: #3b5b7a;
-  --ring: #0f766e;
-  --nav-active: #d5ece9;
-  --nav-active-fg: #0b5a54;
-  --card-border: transparent;
-  --card-shadow: 0 1px 2px rgb(16 48 45 / 0.06), 0 6px 20px rgb(16 48 45 / 0.05);
-  --scrim: rgb(16 48 45 / 0.4);
+  --ring: #7c3aed;
+  --nav-active: #ede7fd;
+  --nav-active-fg: #5b21b6;
+  --card-border: rgb(255 255 255 / 0.7);
+  --card-shadow: 0 1px 2px rgb(19 20 46 / 0.05), 0 10px 30px -6px rgb(76 29 149 / 0.1);
+  --scrim: rgb(19 20 46 / 0.4);
+  --accent-grad: linear-gradient(135deg, #7c3aed, #5b4be0 45%, #0f766e);
+  --accent-glow: 0 6px 18px -4px rgb(124 58 237 / 0.45);
+  --veil: rgb(0 0 0 / 0.12);
+  --glass: 78%;
+  --glow:
+    radial-gradient(55% 45% at 0% 0%, rgb(20 184 166 / 0.16), transparent 70%),
+    radial-gradient(50% 45% at 100% 0%, rgb(139 92 246 / 0.18), transparent 70%),
+    radial-gradient(60% 50% at 85% 100%, rgb(236 72 153 / 0.08), transparent 70%);
 }
 
 :root[data-theme="dark"],
 [data-palette="workbench"][data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0a1413;
-  --surface: #0f1d1c;
-  --surface-2: #152625;
-  --surface-hover: #1a2e2c;
-  --border: #1f3533;
-  --border-strong: #2c4744;
-  --fg: #e6f2f1;
-  --muted: #93afac;
-  --accent: #2dd4bf;
-  --accent-hover: #5eead4;
-  --accent-fg: #04211e;
+  --bg: #07081a;
+  --surface: #11132b;
+  --surface-2: #171a37;
+  --surface-hover: #1e2244;
+  --border: #242850;
+  --border-strong: #363c6c;
+  --fg: #eceefe;
+  --muted: #a4a9d0;
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+  --accent-fg: #140a32;
   --warn: #fb923c;
   --warn-hover: #fdba74;
   --warn-fg: #1c0a02;
   --danger: #f87171;
   --info: #93b4d4;
-  --ring: #5eead4;
-  --nav-active: #163733;
-  --nav-active-fg: #5eead4;
-  --card-border: #1f3533;
-  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.25);
-  --scrim: rgb(1 8 7 / 0.7);
+  --ring: #c4b5fd;
+  --nav-active: #241d4f;
+  --nav-active-fg: #c4b5fd;
+  --card-border: rgb(255 255 255 / 0.07);
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px -8px rgb(0 0 0 / 0.5);
+  --scrim: rgb(3 3 12 / 0.72);
+  --accent-grad: linear-gradient(135deg, #c4b5fd, #a78bfa 45%, #5eead4);
+  --accent-glow: 0 6px 22px -4px rgb(167 139 250 / 0.45);
+  --veil: rgb(255 255 255 / 0.16);
+  --glass: 72%;
+  --glow:
+    radial-gradient(50% 45% at 0% 0%, rgb(45 212 191 / 0.13), transparent 70%),
+    radial-gradient(55% 50% at 100% 0%, rgb(139 92 246 / 0.26), transparent 70%),
+    radial-gradient(60% 50% at 80% 100%, rgb(236 72 153 / 0.1), transparent 70%);
 }
 
 /* Graphite: neutral zinc surfaces and a monochrome accent, so orange updates are the only colour. */
@@ -293,7 +311,7 @@
   --color-nav-active-fg: var(--nav-active-fg);
   --color-card-border: var(--card-border);
   --shadow-card: var(--card-shadow);
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
 }
 
@@ -324,6 +342,26 @@ button:not(:disabled),
 summary,
 label[for] {
   cursor: pointer;
+}
+
+/* Workbench only: the canvas glow, gradient primary buttons and frosted cards. Other palettes stay flat. */
+:root[data-palette="workbench"] body {
+  background-image: var(--glow);
+  background-attachment: fixed;
+}
+
+[data-palette="workbench"] .btn-primary {
+  background-image: var(--accent-grad);
+  box-shadow: var(--accent-glow), inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+[data-palette="workbench"] .btn-primary:hover:enabled {
+  background-image: linear-gradient(var(--veil), var(--veil)), var(--accent-grad);
+}
+
+[data-palette="workbench"] .card {
+  background-color: color-mix(in srgb, var(--surface) var(--glass), transparent);
+  backdrop-filter: blur(20px) saturate(1.4);
 }
 
 ::selection {
