@@ -257,7 +257,8 @@ export function ItemList({ rows }: { rows: Item[] }) {
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!rows.length) return;
+    // Keys pressed on a control inside the grid (sort headers, checkboxes) belong to that control.
+    if (e.target !== e.currentTarget || !rows.length) return;
     const cur = activeIndex < 0 ? -1 : activeIndex;
     const page = Math.max(1, Math.floor((scroller.current?.clientHeight ?? 400) / ROW_HEIGHT) - 1);
     const handled = () => e.preventDefault();

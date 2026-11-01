@@ -7,7 +7,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::model::{Item, ScanResult, now_ms};
+use crate::model::{Item, ScanResult, Status, now_ms};
 use crate::settings::Settings;
 
 pub async fn scan_all(settings: &Settings) -> ScanResult {
@@ -23,6 +23,22 @@ pub async fn scan_all(settings: &Settings) -> ScanResult {
         items,
         warnings,
         scanned_at: now_ms(),
+    }
+}
+
+/// Keeps the last check's verdict on items a rescan found at the same version, until the next check
+/// replaces it. A moved skill keeps `upstream`, so Reinstall still goes to where it lives now.
+pub fn keep_verdicts(prev: &[Item], items: &mut [Item]) {
+    for item in items.iter_mut().filter(|i| i.status == Status::Unchecked) {
+        if let Some(p) = prev
+            .iter()
+            .find(|p| p.id == item.id && p.version == item.version && p.status != Status::Unchecked)
+        {
+            item.status = p.status;
+            item.latest = p.latest.clone();
+            item.status_detail = p.status_detail.clone();
+            item.upstream = p.upstream.clone();
+        }
     }
 }
 
@@ -139,6 +155,35 @@ pub fn github_repo_from_url(url: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Kind, Source, Upstream};
+
+    #[test]
+    fn rescans_keep_the_last_verdict_until_the_version_changes() {
+        let skill = |version: &str| {
+            let mut i = Item::new("skill:x".into(), Kind::Skill, Source::SkillsCli, "x".into());
+            i.version = Some(version.into());
+            i
+        };
+        let mut checked = skill("1");
+        checked.status = Status::Moved;
+        checked.upstream = Some(Upstream {
+            repo: "new/home".into(),
+            folder: None,
+            commit: None,
+        });
+
+        let mut same = [skill("1")];
+        keep_verdicts(std::slice::from_ref(&checked), &mut same);
+        assert_eq!(same[0].status, Status::Moved);
+        assert_eq!(same[0].upstream.as_ref().unwrap().repo, "new/home");
+
+        let mut updated = [skill("2")];
+        keep_verdicts(&[checked], &mut updated);
+        assert_eq!(
+            (updated[0].status, updated[0].upstream.is_none()),
+            (Status::Unchecked, true)
+        );
+    }
 
     #[test]
     fn parses_yaml_front_matter_with_metadata_version() {
