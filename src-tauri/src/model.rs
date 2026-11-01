@@ -41,6 +41,10 @@ pub enum Status {
     /// No installer tracks it, so there is no upstream to check.
     Untracked,
     Error,
+    /// The skill's repo or folder moved upstream; reinstall from `Item.upstream`.
+    Moved,
+    /// The skill was deleted upstream; `Item.upstream.commit` is the commit that removed it.
+    Removed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,8 +83,35 @@ pub struct Item {
     pub meta: BTreeMap<String, String>,
     /// Plugins only: size of the plugin's data folder, `None` when it's missing or empty.
     pub data_bytes: Option<u64>,
+    /// A Claude Code mod: a plugin whose `hooks/hooks.json` loads UI modules.
+    pub is_mod: bool,
+    /// Rough tokens this item adds to every session while it's on.
+    pub cost: Option<crate::cost::Cost>,
+    /// Problems that stop the item from loading the way it should.
+    pub issues: Vec<Issue>,
+    /// Set with `Status::Moved` / `Status::Removed`.
+    pub upstream: Option<Upstream>,
     #[serde(skip)]
     pub check: CheckInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Issue {
+    /// no-frontmatter | bad-frontmatter | no-description | long-description | link-missing | link-replaced | duplicate-name
+    pub code: String,
+    pub message: String,
+}
+
+/// Where a skill went upstream, or the commit that deleted it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Upstream {
+    /// owner/repo the skill lives in now.
+    pub repo: String,
+    /// Its folder in that repo ("" for the repo root).
+    pub folder: Option<String>,
+    pub commit: Option<crate::updates::changelog::Entry>,
 }
 
 /// What the update checker and the actions need to know, kept out of the wire format.
@@ -133,6 +164,10 @@ impl Item {
             notes: Vec::new(),
             meta: BTreeMap::new(),
             data_bytes: None,
+            is_mod: false,
+            cost: None,
+            issues: Vec::new(),
+            upstream: None,
             check: CheckInfo::None,
         }
     }

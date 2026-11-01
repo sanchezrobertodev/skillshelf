@@ -21,6 +21,8 @@ pub enum Action {
     Enable,
     Disable,
     Uninstall,
+    /// Skills CLI: install again from where the skill lives now (moved upstream, or its link is gone).
+    Reinstall,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,7 +37,7 @@ pub struct ActionRequest {
     pub delete_data: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum JobState {
     Queued,
@@ -66,6 +68,20 @@ pub struct JobEvent {
     pub confirm: Option<Confirm>,
 }
 
+/// The last finished job for an item, kept in `last-runs.json` so its output survives a restart.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastRun {
+    pub action: Action,
+    pub state: JobState,
+    pub message: Option<String>,
+    /// The last `MAX_LOG_LINES` lines of output.
+    pub lines: Vec<String>,
+    pub finished_at: u64,
+}
+
+pub const MAX_LOG_LINES: usize = 200;
+
 #[derive(Debug, PartialEq)]
 pub enum Plan {
     Cli {
@@ -80,6 +96,18 @@ fn valid_plugin_id(s: &str) -> bool {
     s.contains('@') && s.chars().all(|c| c.is_ascii_alphanumeric() || "._-@".contains(c)) && !s.starts_with('-')
 }
 
+fn valid_repo(s: &str) -> bool {
+    let mut parts = s.split('/');
+    let ok = |p: Option<&str>| {
+        p.is_some_and(|p| {
+            !p.is_empty()
+                && !p.starts_with(['-', '.'])
+                && p.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        })
+    };
+    ok(parts.next()) && ok(parts.next()) && parts.next().is_none()
+}
+
 fn valid_skill_name(s: &str) -> bool {
     !s.is_empty() && !s.starts_with('-') && s.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
 }
@@ -88,16 +116,36 @@ pub fn plan(item: &Item, req: &ActionRequest) -> Result<Plan, String> {
     match (item.kind, item.source) {
         (Kind::Plugin, Source::Marketplace | Source::Synced) => plugin_plan(item, req),
         (Kind::Skill, Source::SkillsCli) => {
-            let CheckInfo::SkillsCli { name, .. } = &item.check else {
+            let CheckInfo::SkillsCli { name, repo, .. } = &item.check else {
                 return Err("Missing skill install record".into());
             };
             if !valid_skill_name(name) {
                 return Err(format!("Refusing unusual skill name `{name}`"));
             }
+            // Where it lives now if it moved, else where it was installed from.
+            let from = item.upstream.as_ref().map(|u| &u.repo).or(repo.as_ref());
             let args: Vec<&str> = match req.action {
                 Action::Update => vec!["--yes", SKILLS_CLI, "update", name, "-g", "-y"],
                 // Only unlink from Claude Code; other agents that share the skill keep it.
                 Action::Uninstall => vec!["--yes", SKILLS_CLI, "remove", name, "-g", "-a", "claude-code", "-y"],
+                Action::Reinstall => {
+                    let repo = from.ok_or("Only skills installed from GitHub can be reinstalled")?;
+                    if !valid_repo(repo) {
+                        return Err(format!("Refusing unusual repository `{repo}`"));
+                    }
+                    vec![
+                        "--yes",
+                        SKILLS_CLI,
+                        "add",
+                        repo,
+                        "-s",
+                        name,
+                        "-g",
+                        "-a",
+                        "claude-code",
+                        "-y",
+                    ]
+                }
                 Action::Enable | Action::Disable => {
                     return Err("Skills can't be enabled or disabled individually".into());
                 }
@@ -121,8 +169,10 @@ pub fn plan(item: &Item, req: &ActionRequest) -> Result<Plan, String> {
                 }
                 Ok(Plan::Trash(path))
             }
-            Action::Update => Err("No installer tracks this skill, so it can't be updated automatically".into()),
-            _ => Err("Skills can't be enabled or disabled individually".into()),
+            Action::Update | Action::Reinstall => {
+                Err("No installer tracks this skill, so it can't be updated or reinstalled automatically".into())
+            }
+            Action::Enable | Action::Disable => Err("Skills can't be enabled or disabled individually".into()),
         },
         _ => Err("Unsupported item".into()),
     }
@@ -147,6 +197,7 @@ fn plugin_plan(item: &Item, req: &ActionRequest) -> Result<Plan, String> {
     }
 
     let verb = match req.action {
+        Action::Reinstall => return Err("Plugins can't be reinstalled here; update or uninstall them instead".into()),
         Action::Update => "update",
         Action::Enable => "enable",
         Action::Disable => "disable",
@@ -348,6 +399,35 @@ mod tests {
             panic!()
         };
         assert!(args.windows(2).any(|w| w == ["-a", "claude-code"]));
+    }
+
+    #[test]
+    fn reinstall_uses_where_the_skill_moved() {
+        let mut item = Item::new("skill:a".into(), Kind::Skill, Source::SkillsCli, "a".into());
+        item.check = CheckInfo::SkillsCli {
+            name: "a".into(),
+            repo: Some("old/repo".into()),
+            skill_path: "skills/a/SKILL.md".into(),
+            folder_hash: None,
+        };
+        let args = |item: &Item| match plan(item, &req(Action::Reinstall)) {
+            Ok(Plan::Cli { args, .. }) => Ok(args.join(" ")),
+            Ok(_) => panic!(),
+            Err(e) => Err(e),
+        };
+        assert_eq!(
+            args(&item).unwrap(),
+            "--yes skills@1 add old/repo -s a -g -a claude-code -y"
+        );
+        item.upstream = Some(crate::model::Upstream {
+            repo: "new-owner/repo".into(),
+            folder: Some("skills/a".into()),
+            commit: None,
+        });
+        assert!(args(&item).unwrap().contains(" add new-owner/repo "));
+        item.upstream.as_mut().unwrap().repo = "-x/repo".into();
+        assert!(args(&item).is_err());
+        assert!(plan(&plugin("user", Source::Marketplace), &req(Action::Reinstall)).is_err());
     }
 
     #[test]

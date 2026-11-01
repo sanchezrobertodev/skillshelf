@@ -1,11 +1,17 @@
 mod actions;
+mod cost;
+mod health;
+mod mcp;
 mod model;
 mod paths;
 mod proc;
 mod scan;
 mod settings;
 mod updates;
+mod usage;
 
+use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,8 +20,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
-use actions::{ActionRequest, Finished, JobEvent, JobState};
-use model::{CheckInfo, CheckResult, Item, ScanResult};
+use actions::{ActionRequest, Finished, JobEvent, JobState, LastRun};
+use model::{CheckInfo, CheckResult, Item, Kind, ScanResult, now_ms};
 use settings::Settings;
 
 struct AppState {
@@ -24,7 +30,11 @@ struct AppState {
     settings_file: PathBuf,
     /// Serializes actions: the CLIs share lock files.
     action_lock: tokio::sync::Mutex<()>,
+    /// One usage index run at a time: they share the cache file.
+    usage_lock: tokio::sync::Mutex<()>,
     next_job: AtomicU64,
+    last_runs: Mutex<HashMap<String, LastRun>>,
+    last_runs_file: PathBuf,
 }
 
 impl AppState {
@@ -36,6 +46,14 @@ impl AppState {
             .find(|i| i.id == id)
             .cloned()
             .ok_or_else(|| format!("Unknown item `{id}`. Rescan and try again."))
+    }
+
+    fn remember_run(&self, item_id: &str, run: LastRun) {
+        let mut runs = self.last_runs.lock().unwrap();
+        runs.insert(item_id.to_string(), run);
+        if let Ok(json) = serde_json::to_vec(&*runs) {
+            let _ = std::fs::write(&self.last_runs_file, json);
+        }
     }
 }
 
@@ -110,16 +128,35 @@ async fn run_actions(
                     },
                 );
             };
-            let plan = match plan {
-                Ok(p) => p,
-                Err(e) => return emit(JobState::Failed, None, Some(e), None),
+            let mut lines = Vec::new();
+            let finished = match plan {
+                Ok(plan) => {
+                    emit(JobState::Running, None, None, None);
+                    actions::execute(plan, |l| {
+                        lines.push(l.to_string());
+                        emit(JobState::Log, Some(l.to_string()), None, None)
+                    })
+                    .await
+                }
+                Err(e) => Finished::Failed(e),
             };
-            emit(JobState::Running, None, None, None);
-            match actions::execute(plan, |l| emit(JobState::Log, Some(l.to_string()), None, None)).await {
-                Finished::Success(m) => emit(JobState::Success, None, m, None),
-                Finished::Failed(m) => emit(JobState::Failed, None, Some(m), None),
-                Finished::NeedsConfirmation(c, m) => emit(JobState::NeedsConfirmation, None, m, Some(c)),
-            }
+            let (job_state, message, confirm) = match finished {
+                Finished::Success(m) => (JobState::Success, m, None),
+                Finished::Failed(m) => (JobState::Failed, Some(m), None),
+                Finished::NeedsConfirmation(c, m) => (JobState::NeedsConfirmation, m, Some(c)),
+            };
+            lines.drain(..lines.len().saturating_sub(actions::MAX_LOG_LINES));
+            state.remember_run(
+                &event.item_id,
+                LastRun {
+                    action: event.action,
+                    state: job_state,
+                    message: message.clone(),
+                    lines,
+                    finished_at: now_ms(),
+                },
+            );
+            emit(job_state, None, message, confirm);
         });
     }
     Ok(jobs)
@@ -150,11 +187,94 @@ async fn item_changelog(state: State<'_, AppState>, item_id: String) -> Result<u
 }
 
 #[tauri::command]
-fn open_changelog_link(app: AppHandle, item_id: String, url: String) -> Result<(), String> {
-    if !url.starts_with("https://") || !updates::changelog::is_known_link(&item_id, &url) {
+fn open_changelog_link(app: AppHandle, state: State<'_, AppState>, item_id: String, url: String) -> Result<(), String> {
+    // The commit that deleted a skill upstream comes from the update check, not a changelog.
+    let removed_in = state
+        .item(&item_id)
+        .ok()
+        .and_then(|i| i.upstream?.commit?.url)
+        .is_some_and(|u| u == url);
+    if !url.starts_with("https://") || !(removed_in || updates::changelog::is_known_link(&item_id, &url)) {
         return Err("Only links from this item's changelog can be opened".into());
     }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Readme {
+    file: String,
+    /// Markdown, without the front matter block.
+    text: String,
+    truncated: bool,
+}
+
+/// SKILL.md for skills, README.md for plugins, from the item's own folder. At most 200 KB.
+#[tauri::command]
+fn item_readme(state: State<'_, AppState>, item_id: String) -> Result<Option<Readme>, String> {
+    const MAX: usize = 200 * 1024;
+    let item = state.item(&item_id)?;
+    let Some(dir) = item.path.map(PathBuf::from) else {
+        return Ok(None);
+    };
+    let names: &[&str] = match item.kind {
+        Kind::Skill => &["SKILL.md"],
+        Kind::Plugin => &["README.md", "readme.md", "Readme.md"],
+    };
+    let Some(path) = names.iter().map(|n| dir.join(n)).find(|p| p.is_file()) else {
+        return Ok(None);
+    };
+    let mut bytes = Vec::new();
+    std::fs::File::open(&path)
+        .and_then(|f| f.take(MAX as u64 + 1).read_to_end(&mut bytes))
+        .map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+    let truncated = bytes.len() > MAX;
+    bytes.truncate(MAX);
+    let text = String::from_utf8_lossy(&bytes);
+    Ok(Some(Readme {
+        file: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+        text: scan::without_front_matter(&text).to_string(),
+        truncated,
+    }))
+}
+
+/// The last finished job's output per item, kept across restarts.
+#[tauri::command]
+fn last_runs(state: State<'_, AppState>) -> HashMap<String, LastRun> {
+    state.last_runs.lock().unwrap().clone()
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UsageProgress {
+    read: u64,
+    total: u64,
+}
+
+/// Counts uses from the local transcripts (only what was appended since the last run).
+/// Emits `usage-progress` while it reads.
+#[tauri::command]
+async fn usage(app: AppHandle, state: State<'_, AppState>) -> Result<usage::UsageReport, String> {
+    let _guard = state.usage_lock.lock().await;
+    let items = state.items.lock().unwrap().clone();
+    let cache = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("usage-index.json");
+    tauri::async_runtime::spawn_blocking(move || {
+        usage::report(&items, &cache, |read, total| {
+            let _ = app.emit("usage-progress", UsageProgress { read, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Connects to every MCP server through `claude mcp list` (30–60 seconds).
+#[tauri::command]
+async fn mcp_status() -> Result<mcp::McpReport, String> {
+    mcp::status().await
 }
 
 #[tauri::command]
@@ -208,12 +328,21 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let settings_file = app.path().app_config_dir()?.join("settings.json");
+            let data_dir = app.path().app_data_dir()?;
+            let _ = std::fs::create_dir_all(&data_dir);
+            let last_runs_file = data_dir.join("last-runs.json");
+            let last_runs = scan::read_json(&last_runs_file)
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default();
             app.manage(AppState {
                 items: Mutex::new(Vec::new()),
                 settings: Mutex::new(Settings::load(&settings_file)),
                 settings_file,
                 action_lock: tokio::sync::Mutex::new(()),
+                usage_lock: tokio::sync::Mutex::new(()),
                 next_job: AtomicU64::new(1),
+                last_runs: Mutex::new(last_runs),
+                last_runs_file,
             });
             Ok(())
         })
@@ -225,6 +354,10 @@ pub fn run() {
             open_item_repo,
             item_changelog,
             open_changelog_link,
+            mcp_status,
+            usage,
+            item_readme,
+            last_runs,
             get_settings,
             save_settings,
             environment

@@ -5,7 +5,13 @@ import { useStore } from "../store";
 import type { Action, Job } from "../types";
 import { Button, card } from "./ui";
 
-const actionLabel: Record<Action, string> = { update: "Update", enable: "Enable", disable: "Disable", uninstall: "Uninstall" };
+const actionLabel: Record<Action, string> = {
+  update: "Update",
+  enable: "Enable",
+  disable: "Disable",
+  uninstall: "Uninstall",
+  reinstall: "Reinstall",
+};
 
 const stateMeta: Record<Job["state"], { label: string; icon: typeof Clock; cls: string }> = {
   queued: { label: "Queued", icon: Clock, cls: "text-muted" },

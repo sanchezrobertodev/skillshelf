@@ -5,7 +5,9 @@ import {
   CircleCheck,
   CircleDashed,
   CircleHelp,
+  CircleMinus,
   Building2,
+  FolderSymlink,
   Clock,
   LoaderCircle,
   Puzzle,
@@ -79,6 +81,8 @@ const statusStyle: Record<Status, { icon: typeof CircleCheck; cls: string }> = {
   upToDate: { icon: CircleCheck, cls: "text-accent bg-accent/10 border-accent/30" },
   managed: { icon: Building2, cls: "text-info bg-info/10 border-info/30" },
   untracked: { icon: CircleDashed, cls: "text-muted bg-surface-2 border-border" },
+  moved: { icon: FolderSymlink, cls: "text-info bg-info/10 border-info/30" },
+  removed: { icon: CircleMinus, cls: "text-danger bg-danger/10 border-danger/35" },
 };
 
 export function StatusBadge({ status, checking, title }: { status: Status; checking?: boolean; title?: string | null }) {

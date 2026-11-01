@@ -1,7 +1,7 @@
 //! Skills in ~/.claude/skills (tracked by the `skills` CLI lockfile or not) and
 //! in <project>/.claude/skills for each project folder in settings.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -9,8 +9,9 @@ use serde_json::Value;
 
 use super::{github_url, read_front_matter, read_json};
 use crate::model::{CheckInfo, Item, Kind, Source};
-use crate::paths;
 use crate::settings::Settings;
+use crate::updates::plugins::folders_differ;
+use crate::{health, paths};
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -37,8 +38,28 @@ pub fn scan(settings: &Settings, warnings: &mut Vec<String>) -> Vec<Item> {
     let mut items = Vec::new();
 
     let user_dir = paths::user_skills_dir();
+    let mut seen = HashSet::new();
     for dir in skill_dirs(&user_dir) {
+        seen.insert(dir_name(&dir));
         items.push(user_skill(&dir, &lock));
+    }
+
+    // Locked skills Claude Code can't see: the CLI's link in ~/.claude/skills is gone.
+    let mut unlinked: Vec<&String> = lock.keys().filter(|n| !seen.contains(*n)).collect();
+    unlinked.sort();
+    for name in unlinked {
+        let dir = paths::agents_skills_dir().join(name);
+        if dir.join("SKILL.md").is_file() {
+            let mut item = user_skill(&dir, &lock);
+            item.issues.push(health::issue(
+                "link-missing",
+                format!(
+                    "Installed with the skills CLI, but its link in {} is missing, so Claude Code doesn't load it. Reinstall it to restore the link.",
+                    user_dir.display()
+                ),
+            ));
+            items.push(item);
+        }
     }
 
     for project in &settings.projects {
@@ -123,6 +144,18 @@ fn user_skill(dir: &Path, lock: &HashMap<String, LockEntry>) -> Item {
 
     let mut item = base_item(dir, format!("skill:{folder}"), Source::SkillsCli);
     item.scope = Some("global".into());
+    // A real folder where the CLI's link should be: updates go to ~/.agents/skills and Claude Code keeps this copy.
+    let managed = paths::agents_skills_dir().join(&folder);
+    let is_link = std::fs::symlink_metadata(dir).is_ok_and(|m| m.file_type().is_symlink());
+    if !is_link && dir != managed && managed.is_dir() && folders_differ(dir, &managed) {
+        item.issues.push(health::issue(
+            "link-replaced",
+            format!(
+                "This folder replaced the skills CLI's link, so updates go to {} while Claude Code keeps loading this copy.",
+                managed.display()
+            ),
+        ));
+    }
     item.installed_at = entry.installed_at.clone();
     item.updated_at = entry.updated_at.clone();
     item.origin = entry.source.clone();

@@ -26,16 +26,20 @@ export const statusLabel: Record<Status, string> = {
   upToDate: "Up to date",
   managed: "Managed",
   untracked: "Untracked",
+  moved: "Moved upstream",
+  removed: "Removed upstream",
 };
 
 export const statusOrder: Record<Status, number> = {
   updateAvailable: 0,
   error: 1,
-  unknown: 2,
-  unchecked: 3,
-  upToDate: 4,
-  managed: 5,
-  untracked: 6,
+  moved: 2,
+  removed: 3,
+  unknown: 4,
+  unchecked: 5,
+  upToDate: 6,
+  managed: 7,
+  untracked: 8,
 };
 
 export function relativeTime(iso: string | number | null | undefined): string {
