@@ -22,7 +22,7 @@ pub struct CloneStatus {
     pub dir: String,
     pub branch: String,
     pub default_branch: String,
-    /// Commits on origin's default branch that the clone doesn't have.
+    /// Commits on origin's default branch that the running build doesn't have.
     pub behind: u32,
     /// Newest first, `<short sha> <subject>`.
     pub commits: Vec<String>,
@@ -62,8 +62,13 @@ async fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     }
 }
 
-/// Fetches origin and compares the clone with its default branch.
+/// Fetches origin and compares the clone and the running build with its default branch.
 pub async fn status(dir: &Path) -> Result<CloneStatus, String> {
+    status_from(dir, option_env!("SKILLSHELF_COMMIT")).await
+}
+
+/// `built` is the commit the running binary was built from (see build.rs).
+async fn status_from(dir: &Path, built: Option<&str>) -> Result<CloneStatus, String> {
     git(dir, &["fetch", "--quiet", "origin"]).await?;
     let head = git(dir, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
         .await
@@ -78,13 +83,28 @@ pub async fn status(dir: &Path) -> Result<CloneStatus, String> {
         &["rev-list", "--left-right", "--count", &format!("HEAD...{upstream}")],
     )
     .await?;
-    let (ahead, behind) =
-        parse_counts(&counts).ok_or_else(|| format!("Unexpected output from git rev-list: {counts}"))?;
+    let (ahead, _) = parse_counts(&counts).ok_or_else(|| format!("Unexpected output from git rev-list: {counts}"))?;
+    // Count from the build, not HEAD: when the build failed after `git pull`, the checkout is
+    // current but the app isn't, and the update must still be offered.
+    let base = match built {
+        Some(sha)
+            if git(dir, &["cat-file", "-e", &format!("{sha}^{{commit}}")])
+                .await
+                .is_ok() =>
+        {
+            sha
+        }
+        _ => "HEAD",
+    };
+    let count = git(dir, &["rev-list", "--count", &format!("{base}..{upstream}")]).await?;
+    let behind: u32 = count
+        .parse()
+        .map_err(|_| format!("Unexpected output from git rev-list: {count}"))?;
     let dirty = !git(dir, &["status", "--porcelain", "--untracked-files=no"])
         .await?
         .is_empty();
     let commits = if behind > 0 {
-        let range = format!("HEAD..{upstream}");
+        let range = format!("{base}..{upstream}");
         let limit = format!("-{SHOWN}");
         git(dir, &["log", "--format=%h %s", &limit, &range])
             .await?
@@ -246,7 +266,7 @@ mod tests {
         sh(root, &["clone", "-q", "origin.git", "mine"]);
         let mine = root.join("mine");
 
-        let s = status(&mine).await.unwrap();
+        let s = status_from(&mine, None).await.unwrap();
         assert_eq!(
             (s.default_branch.as_str(), s.behind, s.blocked.clone()),
             ("main", 0, None)
@@ -255,16 +275,57 @@ mod tests {
         std::fs::write(other.join("a.txt"), "2").unwrap();
         sh(&other, &["commit", "-qam", "second"]);
         sh(&other, &["push", "-q", "origin", "HEAD:main"]);
-        let s = status(&mine).await.unwrap();
+        let s = status_from(&mine, None).await.unwrap();
         assert_eq!(s.behind, 1);
         assert!(s.commits[0].ends_with(" second"), "{:?}", s.commits);
         assert_eq!(s.blocked, None);
 
+        // The pull worked but the build failed: the checkout is current, the running build isn't.
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&mine)
+            .output()
+            .unwrap();
+        let built = String::from_utf8(out.stdout).unwrap();
+        sh(&mine, &["pull", "-q", "--ff-only"]);
+        assert_eq!(status_from(&mine, None).await.unwrap().behind, 0);
+        let s = status_from(&mine, Some(built.trim())).await.unwrap();
+        assert_eq!((s.behind, s.commits.len(), s.blocked), (1, 1, None));
+        assert_eq!(
+            status_from(&mine, Some("0123456789abcdef0123456789abcdef01234567"))
+                .await
+                .unwrap()
+                .behind,
+            0,
+            "a build commit the clone doesn't have falls back to HEAD"
+        );
+
         std::fs::write(mine.join("a.txt"), "local edit").unwrap();
-        assert!(status(&mine).await.unwrap().blocked.unwrap().contains("uncommitted"));
+        assert!(
+            status_from(&mine, None)
+                .await
+                .unwrap()
+                .blocked
+                .unwrap()
+                .contains("uncommitted")
+        );
         sh(&mine, &["commit", "-qam", "local"]);
-        assert!(status(&mine).await.unwrap().blocked.unwrap().contains("diverged"));
+        assert!(
+            status_from(&mine, None)
+                .await
+                .unwrap()
+                .blocked
+                .unwrap()
+                .contains("diverged")
+        );
         sh(&mine, &["checkout", "-qb", "feature"]);
-        assert!(status(&mine).await.unwrap().blocked.unwrap().contains("branch feature"));
+        assert!(
+            status_from(&mine, None)
+                .await
+                .unwrap()
+                .blocked
+                .unwrap()
+                .contains("branch feature")
+        );
     }
 }
