@@ -13,7 +13,7 @@ use regex::bytes::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::model::{Item, Kind, now_ms};
+use crate::model::{Item, Kind, Source, now_ms};
 use crate::paths;
 
 const WINDOW_DAYS: u32 = 30;
@@ -111,8 +111,22 @@ pub fn report(items: &[Item], cache: &Path, mut on_progress: impl FnMut(u64, u64
         .and_then(|_| std::fs::rename(&tmp, cache))
         .map_err(|e| format!("Could not save the usage index: {e}"))?;
 
+    let root = paths::claude_dir().join("projects");
+    let all = totals(index.files.values());
+    let today = (now_ms() / 86_400_000) as u32;
+    Ok(UsageReport {
+        by_item: items
+            .iter()
+            .map(|i| (i.id.clone(), usage_for(i, &index, &root, &all, today)))
+            .collect(),
+        files: files.len(),
+        indexed_at: now_ms(),
+    })
+}
+
+fn totals<'a>(files: impl Iterator<Item = &'a FileState>) -> HashMap<&'a str, Counts> {
     let mut totals: HashMap<&str, Counts> = HashMap::new();
-    for state in index.files.values() {
+    for state in files {
         for (key, c) in &state.counts {
             let t = totals.entry(key.as_str()).or_default();
             for (day, n) in &c.days {
@@ -123,15 +137,38 @@ pub fn report(items: &[Item], cache: &Path, mut on_progress: impl FnMut(u64, u64
             }
         }
     }
-    let today = (now_ms() / 86_400_000) as u32;
-    Ok(UsageReport {
-        by_item: items
-            .iter()
-            .map(|i| (i.id.clone(), credit(i, &totals, today)))
-            .collect(),
-        files: files.len(),
-        indexed_at: now_ms(),
-    })
+    totals
+}
+
+/// A project's skills only load in sessions inside that project, so only those sessions count.
+fn usage_for(item: &Item, index: &Index, root: &Path, all: &HashMap<&str, Counts>, today: u32) -> Usage {
+    let Some(project) = item.meta.get("Project").filter(|_| item.source == Source::Project) else {
+        return credit(item, all, today);
+    };
+    let project = transcript_folder(project);
+    let files = index.files.iter().filter(|(path, _)| {
+        Path::new(path)
+            .strip_prefix(root)
+            .ok()
+            .and_then(|rel| rel.components().next())
+            .is_some_and(|c| in_project(&c.as_os_str().to_string_lossy(), &project))
+    });
+    credit(item, &totals(files.map(|(_, s)| s)), today)
+}
+
+/// The folder in ~/.claude/projects that Claude Code keeps a directory's sessions in: every
+/// character that isn't an ASCII letter or digit becomes `-`.
+fn transcript_folder(dir: &str) -> String {
+    dir.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
+/// Whether sessions in transcript folder `folder` ran in the project or a folder inside it.
+// shortcut: also matches a sibling whose name extends the project's after a symbol ("app-old" for "app"); fine until such pairs show up.
+fn in_project(folder: &str, project: &str) -> bool {
+    let (folder, project) = (folder.to_ascii_lowercase(), project.to_ascii_lowercase());
+    folder == project || folder.starts_with(&format!("{project}-"))
 }
 
 fn transcripts(root: &Path) -> Vec<PathBuf> {
@@ -297,7 +334,6 @@ fn day_number(ts: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Source;
 
     const SKILL: &str = r#"{"parentUuid":"x","type":"assistant","timestamp":"2026-10-23T06:43:02.042Z","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Skill","input":{"skill":"ui-ux-pro-max:ui-ux-pro-max","args":"x"}}]}}"#;
     const AGENT: &str = r#"{"type":"assistant","timestamp":"2026-10-24T01:00:00Z","message":{"content":[{"type":"tool_use","id":"t","name":"Agent","input":{"description":"d","subagent_type":"pm-skills:cs-pm-orchestrator"}}]},"wireToolInputs":{"t":{"subagent_type":"pm-skills:cs-pm-orchestrator"}}}"#;
@@ -410,5 +446,45 @@ mod tests {
         let u = credit(&skill, &totals, today);
         assert_eq!(u.uses, 0, "only the last 30 days count");
         assert_eq!(u.last_used.as_deref(), Some("2026-09-01T00:00:00Z"));
+    }
+
+    #[test]
+    fn project_skills_count_only_their_projects_sessions() {
+        let today = day_number("2026-10-31").unwrap();
+        let used = |n: u32| FileState {
+            offset: 1,
+            counts: HashMap::from([(
+                "skill:deploy".to_string(),
+                Counts {
+                    days: HashMap::from([(today, n)]),
+                    last: None,
+                },
+            )]),
+        };
+        let index = Index {
+            version: INDEX_VERSION,
+            files: HashMap::from([
+                ("/p/C--work-app/s1.jsonl".to_string(), used(1)),
+                ("/p/C--work-app-api/s2.jsonl".to_string(), used(2)), // a folder inside the project
+                ("/p/C--work-shop/s3.jsonl".to_string(), used(4)),
+            ]),
+        };
+        let all = totals(index.files.values());
+        let project = |dir: &str| {
+            let mut i = Item::new(
+                format!("project:{dir}:deploy"),
+                Kind::Skill,
+                Source::Project,
+                "deploy".into(),
+            );
+            i.meta.insert("Project".into(), dir.into());
+            i
+        };
+        let root = Path::new("/p");
+        assert_eq!(transcript_folder(r"C:\work\app"), "C--work-app");
+        assert_eq!(usage_for(&project(r"C:\work\app"), &index, root, &all, today).uses, 3);
+        assert_eq!(usage_for(&project(r"c:\work\shop"), &index, root, &all, today).uses, 4);
+        let user = Item::new("skill:deploy".into(), Kind::Skill, Source::Local, "deploy".into());
+        assert_eq!(usage_for(&user, &index, root, &all, today).uses, 7);
     }
 }
