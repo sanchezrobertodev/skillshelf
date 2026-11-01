@@ -41,7 +41,7 @@ struct AppState {
     last_runs_file: PathBuf,
     /// Bumped by Stop: jobs queued under an older value are cancelled.
     cancel: tokio::sync::watch::Sender<u64>,
-    /// When the last update check finished (ms), for the daily check.
+    /// When the last update check finished (ms), or launch time before the first, for the daily check.
     last_check: AtomicU64,
     /// Updates already announced, so each gets one notification.
     announced_file: PathBuf,
@@ -113,11 +113,6 @@ async fn run_actions(
     let mut jobs = Vec::new();
     for req in requests {
         let mut item = state.item(&req.item_id)?;
-        // The data folder may have filled since the scan; decide --keep-data on what's there now.
-        if let CheckInfo::Plugin { plugin_id, .. } = &item.check {
-            item.data_bytes = paths::plugin_data_size(plugin_id);
-        }
-        let plan = actions::plan(&item, &req);
         let job_id = state.next_job.fetch_add(1, Ordering::Relaxed);
         let event = JobEvent {
             job_id,
@@ -141,6 +136,12 @@ async fn run_actions(
             let state = app.state::<AppState>();
             let _guard = state.action_lock.lock().await;
             let mut stop = state.cancel.subscribe();
+            // The data folder may have filled since the scan or while this job waited for the lock;
+            // decide --keep-data on what's there now.
+            if let CheckInfo::Plugin { plugin_id, .. } = &item.check {
+                item.data_bytes = paths::plugin_data_size(plugin_id);
+            }
+            let plan = actions::plan(&item, &req);
             let emit = |state: JobState, line: Option<String>, message: Option<String>, confirm| {
                 let _ = app.emit(
                     "job",
@@ -386,7 +387,8 @@ pub fn run() {
                 last_runs: Mutex::new(last_runs),
                 last_runs_file,
                 cancel: tokio::sync::watch::channel(0).0,
-                last_check: AtomicU64::new(0),
+                // Counting from launch, auto-check turned on later still gets a check within a day.
+                last_check: AtomicU64::new(now_ms()),
                 announced_file,
             });
             if let Err(e) = tray::create(app.handle()) {
@@ -435,7 +437,7 @@ fn daily_checks(app: AppHandle) {
             let state = app.state::<AppState>();
             let last = state.last_check.load(Ordering::Relaxed);
             let auto = state.settings.lock().unwrap().auto_check;
-            if auto && last != 0 && now_ms().saturating_sub(last) >= DAY_MS {
+            if auto && now_ms().saturating_sub(last) >= DAY_MS {
                 let _ = app.emit("scheduled-check", ());
             }
         }
