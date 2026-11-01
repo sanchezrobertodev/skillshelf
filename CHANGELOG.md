@@ -6,6 +6,8 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-31
+
 ### Added
 
 - In-app updates. Skillshelf checks GitHub Releases for a new version on launch, shows what's new, and installs it with **Install & restart**. Updates are signed and verified before they install. You can also check from **Settings → App updates**.
@@ -59,5 +61,6 @@ First release of Skillshelf, a desktop app for the skills and plugins you've ins
 - Filter, sort and search by type, status, source, marketplace/repo and on/off state.
 - Enable/disable plugins, uninstall items (always with a confirmation), and open an item's folder or source repo.
 
-[Unreleased]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sanchezrobertodev/skillshelf/releases/tag/v0.1.0
