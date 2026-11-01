@@ -4,7 +4,8 @@
 
 /* Workbench (design-system/skillshelf/MASTER.md): teal primary, orange for updates, soft tinted canvas with white cards.
    Every text pair is checked at 4.5:1 or better, including chips on their own 10-12% tints. */
-:root {
+:root,
+[data-palette="workbench"] {
   color-scheme: light;
   --bg: #f2f7f7;
   --surface: #ffffff;
@@ -30,7 +31,8 @@
   --scrim: rgb(16 48 45 / 0.4);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+[data-palette="workbench"][data-theme="dark"] {
   color-scheme: dark;
   --bg: #0a1413;
   --surface: #0f1d1c;
@@ -54,6 +56,218 @@
   --card-border: #1f3533;
   --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.25);
   --scrim: rgb(1 8 7 / 0.7);
+}
+
+/* Graphite: neutral zinc surfaces and a monochrome accent, so orange updates are the only colour. */
+[data-palette="graphite"] {
+  color-scheme: light;
+  --bg: #f4f4f5;
+  --surface: #ffffff;
+  --surface-2: #ececee;
+  --surface-hover: #e4e4e7;
+  --border: #dcdce0;
+  --border-strong: #c4c4cb;
+  --fg: #18181b;
+  --muted: #52525b;
+  --accent: #27272a;
+  --accent-hover: #09090b;
+  --accent-fg: #ffffff;
+  --warn: #b43c0a;
+  --warn-hover: #9a330a;
+  --warn-fg: #ffffff;
+  --danger: #b91c1c;
+  --info: #3f5873;
+  --ring: #27272a;
+  --nav-active: #e4e4e7;
+  --nav-active-fg: #18181b;
+  --card-border: transparent;
+  --card-shadow: 0 1px 2px rgb(24 24 27 / 0.06), 0 6px 20px rgb(24 24 27 / 0.05);
+  --scrim: rgb(24 24 27 / 0.4);
+}
+
+[data-palette="graphite"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c0c0e;
+  --surface: #151518;
+  --surface-2: #1d1d21;
+  --surface-hover: #232328;
+  --border: #2a2a30;
+  --border-strong: #3a3a42;
+  --fg: #f4f4f5;
+  --muted: #a1a1aa;
+  --accent: #e4e4e7;
+  --accent-hover: #ffffff;
+  --accent-fg: #18181b;
+  --warn: #fb923c;
+  --warn-hover: #fdba74;
+  --warn-fg: #1c0a02;
+  --danger: #f87171;
+  --info: #9fb6cf;
+  --ring: #e4e4e7;
+  --nav-active: #27272a;
+  --nav-active-fg: #fafafa;
+  --card-border: #2a2a30;
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.25);
+  --scrim: rgb(0 0 0 / 0.7);
+}
+
+/* Indigo: cool slate surfaces with an indigo accent. */
+[data-palette="indigo"] {
+  color-scheme: light;
+  --bg: #f3f4fa;
+  --surface: #ffffff;
+  --surface-2: #e9ebf6;
+  --surface-hover: #e1e4f3;
+  --border: #d6daec;
+  --border-strong: #bcc2df;
+  --fg: #161a33;
+  --muted: #4c5270;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-fg: #ffffff;
+  --warn: #b43c0a;
+  --warn-hover: #9a330a;
+  --warn-fg: #ffffff;
+  --danger: #b91c1c;
+  --info: #475569;
+  --ring: #4f46e5;
+  --nav-active: #e0e0fb;
+  --nav-active-fg: #3730a3;
+  --card-border: transparent;
+  --card-shadow: 0 1px 2px rgb(22 26 51 / 0.06), 0 6px 20px rgb(22 26 51 / 0.05);
+  --scrim: rgb(22 26 51 / 0.4);
+}
+
+[data-palette="indigo"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d1a;
+  --surface: #121527;
+  --surface-2: #191d33;
+  --surface-hover: #1f243d;
+  --border: #252a45;
+  --border-strong: #353b5c;
+  --fg: #e8eaf8;
+  --muted: #a0a6c8;
+  --accent: #a5b4fc;
+  --accent-hover: #c7d2fe;
+  --accent-fg: #11143a;
+  --warn: #fb923c;
+  --warn-hover: #fdba74;
+  --warn-fg: #1c0a02;
+  --danger: #f87171;
+  --info: #a9b8cf;
+  --ring: #c7d2fe;
+  --nav-active: #232a5c;
+  --nav-active-fg: #c7d2fe;
+  --card-border: #252a45;
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.25);
+  --scrim: rgb(2 3 10 / 0.7);
+}
+
+/* Rose: warm stone surfaces with a rose accent; updates move to amber so they stay distinct. */
+[data-palette="rose"] {
+  color-scheme: light;
+  --bg: #f8f4f3;
+  --surface: #ffffff;
+  --surface-2: #f2eae8;
+  --surface-hover: #ede2df;
+  --border: #e6d9d6;
+  --border-strong: #d4c0bc;
+  --fg: #2b1418;
+  --muted: #64494d;
+  --accent: #be123c;
+  --accent-hover: #9f1239;
+  --accent-fg: #ffffff;
+  --warn: #a14a04;
+  --warn-hover: #873e04;
+  --warn-fg: #ffffff;
+  --danger: #a51a1a;
+  --info: #4a5a70;
+  --ring: #be123c;
+  --nav-active: #fbe1e6;
+  --nav-active-fg: #9f1239;
+  --card-border: transparent;
+  --card-shadow: 0 1px 2px rgb(43 20 24 / 0.06), 0 6px 20px rgb(43 20 24 / 0.05);
+  --scrim: rgb(43 20 24 / 0.4);
+}
+
+[data-palette="rose"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #140b0d;
+  --surface: #1c1114;
+  --surface-2: #25171b;
+  --surface-hover: #2c1c20;
+  --border: #36232a;
+  --border-strong: #4a3038;
+  --fg: #f7e9ec;
+  --muted: #c4a4ab;
+  --accent: #fb7185;
+  --accent-hover: #fda4af;
+  --accent-fg: #2a0610;
+  --warn: #fbbf24;
+  --warn-hover: #fcd34d;
+  --warn-fg: #1c1003;
+  --danger: #f87171;
+  --info: #a9b8cf;
+  --ring: #fda4af;
+  --nav-active: #3d1a24;
+  --nav-active-fg: #fda4af;
+  --card-border: #36232a;
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.25);
+  --scrim: rgb(10 3 5 / 0.7);
+}
+
+/* High contrast: every text pair at 7:1 or better, hard borders instead of shadows. */
+[data-palette="contrast"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --surface-hover: #e3e3e3;
+  --border: #6b6b6b;
+  --border-strong: #000000;
+  --fg: #000000;
+  --muted: #2e2e2e;
+  --accent: #0037b3;
+  --accent-hover: #002480;
+  --accent-fg: #ffffff;
+  --warn: #8a2c00;
+  --warn-hover: #6b2200;
+  --warn-fg: #ffffff;
+  --danger: #8a0000;
+  --info: #1d3a5f;
+  --ring: #000000;
+  --nav-active: #000000;
+  --nav-active-fg: #ffffff;
+  --card-border: #000000;
+  --card-shadow: none;
+  --scrim: rgb(0 0 0 / 0.6);
+}
+
+[data-palette="contrast"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #000000;
+  --surface-2: #161616;
+  --surface-hover: #242424;
+  --border: #9a9a9a;
+  --border-strong: #ffffff;
+  --fg: #ffffff;
+  --muted: #e2e2e2;
+  --accent: #7dd3fc;
+  --accent-hover: #bae6fd;
+  --accent-fg: #000000;
+  --warn: #ffb266;
+  --warn-hover: #ffcc99;
+  --warn-fg: #000000;
+  --danger: #ff8080;
+  --info: #b8d4ff;
+  --ring: #ffffff;
+  --nav-active: #ffffff;
+  --nav-active-fg: #000000;
+  --card-border: #ffffff;
+  --card-shadow: none;
+  --scrim: rgb(0 0 0 / 0.75);
 }
 
 @theme inline {

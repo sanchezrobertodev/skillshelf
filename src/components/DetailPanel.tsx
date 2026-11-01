@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Bot, Copy, Download, ExternalLink, FolderOpen, Hammer, Plug, Power, PowerOff, RotateCcw, ScrollText, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { api, errorText } from "../api";
+import { type TKey, useT } from "../i18n";
 import { showsChangelog } from "../lib/changelog";
 import { canReinstall, canToggle, canUninstall, canUpdate, fullDate, kindLabel, sourceHelp, sourceLabel } from "../lib/format";
 import { useStore } from "../store";
@@ -10,12 +11,12 @@ import { ChangelogPanel } from "./Changelog";
 import { CostSection, IssueList, LastRunSection, ReadmeSection, UpstreamNote, UsageSection } from "./DetailSections";
 import { Button, card, IconButton, KindIcon, StatusBadge } from "./ui";
 
-const childMeta: Record<Child["kind"], { label: string; icon: typeof Bot }> = {
-  skill: { label: "Skills", icon: ScrollText },
-  command: { label: "Commands", icon: SquareTerminal },
-  agent: { label: "Agents", icon: Bot },
-  mcp: { label: "MCP servers", icon: Plug },
-  hook: { label: "Hooks", icon: Hammer },
+const childMeta: Record<Child["kind"], { label: TKey; icon: typeof Bot }> = {
+  skill: { label: "detail.children.skill", icon: ScrollText },
+  command: { label: "detail.children.command", icon: SquareTerminal },
+  agent: { label: "detail.children.agent", icon: Bot },
+  mcp: { label: "detail.children.mcp", icon: Plug },
+  hook: { label: "detail.children.hook", icon: Hammer },
 };
 
 function Fact({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
@@ -28,6 +29,7 @@ function Fact({ label, children, mono }: { label: string; children: React.ReactN
 }
 
 export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean }) {
+  const t = useT();
   const busy = useStore((s) => s.busy);
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
@@ -55,13 +57,13 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      setError("Couldn't copy to the clipboard");
+      setError(t("detail.copyFailed"));
     }
   };
 
   return (
     <aside
-      aria-label={`${item.name} details`}
+      aria-label={t("detail.label", { name: item.name })}
       className={clsx(
         "flex w-[380px] shrink-0 flex-col overflow-hidden",
         card,
@@ -76,10 +78,10 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
           </h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <StatusBadge status={item.status} checking={busy === "checking"} />
-            {item.enabled === false && <span className="text-xs text-muted">Disabled</span>}
+            {item.enabled === false && <span className="text-xs text-muted">{t("detail.disabled")}</span>}
           </div>
         </div>
-        <IconButton label="Close details" onClick={closeDetail} className="-mt-1 -mr-2">
+        <IconButton label={t("detail.close")} onClick={closeDetail} className="-mt-1 -mr-2">
           <X className="size-4" />
         </IconButton>
       </div>
@@ -99,13 +101,13 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
               onClick={() => confirm({ type: "update", items: [item] })}
             >
               <Download aria-hidden className="size-3.5" />
-              {item.status === "updateAvailable" ? `Update to ${item.latest ?? "latest"}` : "Update"}
+              {item.status === "updateAvailable" ? t("detail.updateTo", { version: item.latest ?? t("detail.latestVersion") }) : t("detail.update")}
             </Button>
           )}
           {canReinstall(item) && (
             <Button size="sm" variant="primary" disabled={running} onClick={() => void run([{ itemId: item.id, action: "reinstall" }])}>
               <RotateCcw aria-hidden className="size-3.5" />
-              Reinstall
+              {t("detail.reinstall")}
             </Button>
           )}
           {canToggle(item) && (
@@ -115,25 +117,25 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
               onClick={() => void run([{ itemId: item.id, action: item.enabled ? "disable" : "enable" }])}
             >
               {item.enabled ? <PowerOff aria-hidden className="size-3.5" /> : <Power aria-hidden className="size-3.5" />}
-              {item.enabled ? "Disable" : "Enable"}
+              {item.enabled ? t("detail.disable") : t("detail.enable")}
             </Button>
           )}
           {item.path && (
             <Button size="sm" onClick={() => attempt(() => api.openFolder(item.id))}>
               <FolderOpen aria-hidden className="size-3.5" />
-              Open folder
+              {t("detail.openFolder")}
             </Button>
           )}
           {item.repoUrl && (
             <Button size="sm" onClick={() => attempt(() => api.openRepo(item.id))}>
               <ExternalLink aria-hidden className="size-3.5" />
-              Source
+              {t("detail.repo")}
             </Button>
           )}
           {canUninstall(item) && (
             <Button size="sm" variant="danger" disabled={running} onClick={() => confirm({ type: "uninstall", items: [item] })}>
               <Trash2 aria-hidden className="size-3.5" />
-              Uninstall
+              {t("detail.uninstall")}
             </Button>
           )}
         </div>
@@ -164,18 +166,18 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
         <UsageSection item={item} />
 
         <dl className="mb-6 grid grid-cols-[104px_1fr] gap-x-3 gap-y-2 text-[13px]">
-          <Fact label="Type">{kindLabel[item.kind]}</Fact>
-          <Fact label="Source">
+          <Fact label={t("detail.type")}>{kindLabel[item.kind]}</Fact>
+          <Fact label={t("detail.source")}>
             <span title={sourceHelp[item.source]}>{sourceLabel[item.source]}</span>
           </Fact>
-          {item.origin && <Fact label={item.kind === "plugin" ? "Marketplace" : "From"} mono>{item.origin}</Fact>}
-          {item.scope && <Fact label="Scope">{item.scope}</Fact>}
-          <Fact label="Version" mono>
+          {item.origin && <Fact label={item.kind === "plugin" ? t("source.marketplace") : t("detail.from")} mono>{item.origin}</Fact>}
+          {item.scope && <Fact label={t("detail.scope")}>{item.scope}</Fact>}
+          <Fact label={t("detail.version")} mono>
             {item.version ?? "—"}
           </Fact>
-          {item.latest && <Fact label="Latest" mono>{item.latest}</Fact>}
-          {item.installedAt && <Fact label="Installed">{fullDate(item.installedAt)}</Fact>}
-          {item.updatedAt && item.updatedAt !== item.installedAt && <Fact label="Updated">{fullDate(item.updatedAt)}</Fact>}
+          {item.latest && <Fact label={t("detail.latest")} mono>{item.latest}</Fact>}
+          {item.installedAt && <Fact label={t("detail.installed")}>{fullDate(item.installedAt)}</Fact>}
+          {item.updatedAt && item.updatedAt !== item.installedAt && <Fact label={t("detail.updated")}>{fullDate(item.updatedAt)}</Fact>}
           {Object.entries(item.meta).map(([k, v]) => (
             <Fact key={k} label={k} mono>
               {v}
@@ -185,10 +187,10 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
 
         {item.path && (
           <div className="mb-6">
-            <h3 className="mb-1.5 text-[11px] font-semibold tracking-wider text-muted uppercase">Location</h3>
+            <h3 className="mb-1.5 text-[11px] font-semibold tracking-wider text-muted uppercase">{t("detail.location")}</h3>
             <div className="flex items-start gap-1 rounded-md border border-border bg-bg p-2">
               <code className="min-w-0 flex-1 font-mono text-xs leading-5 break-all">{item.path}</code>
-              <IconButton label={copied ? "Copied" : "Copy path"} className="size-7" onClick={() => void copyPath()}>
+              <IconButton label={copied ? t("detail.copied") : t("detail.copyPath")} className="size-7" onClick={() => void copyPath()}>
                 <Copy className="size-3.5" />
               </IconButton>
             </div>
@@ -206,7 +208,7 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
             <section key={kind} className="mb-5">
               <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-muted uppercase">
                 <Icon aria-hidden className="size-3.5" />
-                {label} <span className="font-mono">{list.length}</span>
+                {t(label)} <span className="font-mono">{list.length}</span>
               </h3>
               <ul className="divide-y divide-border rounded-md border border-border">
                 {list.map((c) => (

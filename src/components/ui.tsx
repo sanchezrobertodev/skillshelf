@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useT } from "../i18n";
 import { statusLabel } from "../lib/format";
 import type { Kind, Status } from "../types";
 
@@ -86,6 +87,7 @@ const statusStyle: Record<Status, { icon: typeof CircleCheck; cls: string }> = {
 };
 
 export function StatusBadge({ status, checking, title }: { status: Status; checking?: boolean; title?: string | null }) {
+  const t = useT();
   const pending = checking && status === "unchecked";
   const { icon: Icon, cls } = statusStyle[status];
   return (
@@ -101,7 +103,7 @@ export function StatusBadge({ status, checking, title }: { status: Status; check
       ) : (
         <Icon aria-hidden className="size-3.5 shrink-0" />
       )}
-      <span className="truncate">{pending ? "Checking…" : statusLabel[status]}</span>
+      <span className="truncate">{pending ? t("ui.checking") : statusLabel[status]}</span>
     </span>
   );
 }
@@ -205,6 +207,7 @@ export function Modal({
   footer?: ReactNode;
   wide?: boolean;
 }) {
+  const t = useT();
   const panel = useRef<HTMLDivElement>(null);
   // Callers pass a new onClose each render; a ref keeps re-renders from re-running the focus setup.
   const close = useRef(onClose);
@@ -255,7 +258,7 @@ export function Modal({
           <h2 id="modal-title" className="text-base font-semibold">
             {title}
           </h2>
-          <IconButton label="Close" onClick={onClose} className="-mr-2">
+          <IconButton label={t("common.close")} onClick={onClose} className="-mr-2">
             <X className="size-4" />
           </IconButton>
         </div>

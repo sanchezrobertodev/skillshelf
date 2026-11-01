@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, errorText } from "../api";
+import { t } from "../i18n";
 import type { Changelog, Item } from "../types";
 
 export type ChangelogState =
@@ -72,7 +73,6 @@ export function isEmpty(log: Changelog) {
   return log.entries.length === 0 && log.sections.length === 0;
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** One line for the update confirmation, e.g. "2 releases (1.7.4, 1.7.3) · 26 commits". */
 export function changelogCounts(log: Changelog): string | null {
@@ -81,9 +81,9 @@ export function changelogCounts(log: Changelog): string | null {
     const versions = log.sections.map((s) => s.version).filter(Boolean) as string[];
     const shown = versions.slice(0, 2).join(", ");
     const more = versions.length > 2 ? ` +${versions.length - 2}` : "";
-    parts.push(`${plural(log.sections.length, "release")}${shown ? ` (${shown}${more})` : ""}`);
+    parts.push(`${t("changelog.releases", { count: log.sections.length })}${shown ? ` (${shown}${more})` : ""}`);
   }
-  if (log.total) parts.push(plural(log.total, "commit"));
+  if (log.total) parts.push(t("changelog.commits", { count: log.total }));
   return parts.length ? parts.join(" · ") : null;
 }
 

@@ -23,6 +23,7 @@ use serde::Serialize;
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_opener::OpenerExt;
 
 use actions::{ActionRequest, Finished, JobEvent, JobState, LastRun};
@@ -42,10 +43,12 @@ struct AppState {
     last_runs_file: PathBuf,
     /// Bumped by Stop: jobs queued under an older value are cancelled.
     cancel: tokio::sync::watch::Sender<u64>,
-    /// When the last update check finished (ms), or launch time before the first, for the daily check.
+    /// When the last update check finished (ms), or launch time before the first, for scheduled checks.
     last_check: AtomicU64,
     /// Updates already announced, so each gets one notification.
     announced_file: PathBuf,
+    /// The tray and notification texts the UI last sent, in its language.
+    tray_text: Mutex<HashMap<String, String>>,
 }
 
 impl AppState {
@@ -84,7 +87,9 @@ async fn check_updates(app: AppHandle, state: State<'_, AppState>) -> Result<Che
     let result = updates::check_all(items).await;
     *state.items.lock().unwrap() = result.items.clone();
     state.last_check.store(now_ms(), Ordering::Relaxed);
-    tray::announce(&app, &result.items, &state.announced_file);
+    let text = state.tray_text.lock().unwrap().clone();
+    let notify = state.settings.lock().unwrap().notifications;
+    tray::announce(&app, &result.items, &state.announced_file, &text, notify);
     Ok(result)
 }
 
@@ -121,8 +126,16 @@ fn stop_actions(state: State<'_, AppState>) {
 
 /// The UI's summary for the tray menu and the window title.
 #[tauri::command]
-fn update_tray(app: AppHandle, summary: tray::TrayState) -> Result<(), String> {
+fn update_tray(app: AppHandle, state: State<'_, AppState>, summary: tray::TrayState) -> Result<(), String> {
+    state.tray_text.lock().unwrap().clone_from(&summary.text);
     tray::update(&app, &summary).map_err(|e| e.to_string())
+}
+
+/// Starts Skillshelf hidden in the tray at login, or stops doing so.
+#[tauri::command]
+fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
+    let launcher = app.autolaunch();
+    if on { launcher.enable() } else { launcher.disable() }.map_err(|e| e.to_string())
 }
 
 #[derive(Serialize)]
@@ -237,6 +250,23 @@ fn open_item_repo(app: AppHandle, state: State<'_, AppState>, item_id: String) -
         return Err("Only https links can be opened".into());
     }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Opens one of Skillshelf's own pages on GitHub. The UI names the page; the URLs are fixed here.
+#[tauri::command]
+fn open_project_page(app: AppHandle, page: String) -> Result<(), String> {
+    const REPO: &str = "https://github.com/sanchezrobertodev/skillshelf";
+    let path = match page.as_str() {
+        "repo" => "",
+        "issues" => "/issues/new/choose",
+        "changelog" => "/blob/master/CHANGELOG.md",
+        "license" => "/blob/master/LICENSE",
+        "translate" => "/blob/master/CONTRIBUTING.md#translations",
+        _ => return Err(format!("Unknown page `{page}`")),
+    };
+    app.opener()
+        .open_url(format!("{REPO}{path}"), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// What changed between the installed and the latest version. Fetched when the user opens an item.
@@ -359,10 +389,12 @@ struct Environment {
     gh: Option<String>,
     os: &'static str,
     version: &'static str,
+    tray: bool,
+    autostart: bool,
 }
 
 #[tauri::command]
-fn environment() -> Environment {
+fn environment(app: AppHandle) -> Environment {
     let find = |p: &str| proc::resolve(p).map(|p| p.display().to_string());
     Environment {
         claude_dir: paths::claude_dir().display().to_string(),
@@ -372,6 +404,8 @@ fn environment() -> Environment {
         gh: find("gh"),
         os: std::env::consts::OS,
         version: env!("CARGO_PKG_VERSION"),
+        tray: tray::has_tray(&app),
+        autostart: app.autolaunch().is_enabled().unwrap_or(false),
     }
 }
 
@@ -387,10 +421,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        // With a tray icon, closing the window hides it so daily checks keep running. Quit from the tray.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![HIDDEN]),
+        ))
+        // With a tray icon, closing the window hides it so scheduled checks keep running, unless
+        // the user chose to quit instead. Quit from the tray.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event
                 && tray::has_tray(window.app_handle())
+                && window.state::<AppState>().settings.lock().unwrap().close_to_tray
             {
                 api.prevent_close();
                 let _ = window.hide();
@@ -418,6 +458,7 @@ pub fn run() {
                 // Counting from launch, auto-check turned on later still gets a check within a day.
                 last_check: AtomicU64::new(now_ms()),
                 announced_file,
+                tray_text: Mutex::new(HashMap::new()),
             });
             if selfupdate::clone_dir().is_some() {
                 selfupdate::remove_old_binary();
@@ -425,7 +466,11 @@ pub fn run() {
             if let Err(e) = tray::create(app.handle()) {
                 eprintln!("No tray icon ({e}); closing the window will quit.");
             }
-            daily_checks(app.handle().clone());
+            // Started at login: stay in the tray. Without one there'd be no way to open the window.
+            if !(std::env::args().any(|a| a == HIDDEN) && tray::has_tray(app.handle())) {
+                tray::show_main(app.handle());
+            }
+            scheduled_checks(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -434,6 +479,7 @@ pub fn run() {
             run_actions,
             open_item_folder,
             open_item_repo,
+            open_project_page,
             item_changelog,
             open_changelog_link,
             mcp_status,
@@ -444,6 +490,7 @@ pub fn run() {
             clone_status,
             clone_update,
             update_tray,
+            set_autostart,
             get_settings,
             save_settings,
             environment
@@ -459,18 +506,23 @@ pub fn run() {
         });
 }
 
-/// Asks the UI to rescan and check once a day after the last check. Hourly ticks, compared with the
-/// wall clock, so a sleeping laptop catches up when it wakes.
-fn daily_checks(app: AppHandle) {
-    const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+/// Passed by the login item, which starts Skillshelf in the tray.
+const HIDDEN: &str = "--hidden";
+
+/// Asks the UI to rescan and check once the chosen interval has passed since the last check.
+/// Hourly ticks, compared with the wall clock, so a sleeping laptop catches up when it wakes.
+fn scheduled_checks(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(60 * 60));
         loop {
             tick.tick().await;
             let state = app.state::<AppState>();
             let last = state.last_check.load(Ordering::Relaxed);
-            let auto = state.settings.lock().unwrap().auto_check;
-            if auto && now_ms().saturating_sub(last) >= DAY_MS {
+            let (auto, every) = {
+                let s = state.settings.lock().unwrap();
+                (s.auto_check, s.check_interval.ms())
+            };
+            if auto && now_ms().saturating_sub(last) >= every {
                 let _ = app.emit("scheduled-check", ());
             }
         }

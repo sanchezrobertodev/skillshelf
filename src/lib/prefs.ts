@@ -1,8 +1,12 @@
 // Per-viewer UI preferences. Storage can be unavailable, so every access is guarded.
 
+import type { LanguagePref } from "../i18n";
 import type { Kind, Source, Status } from "../types";
 
 export type Theme = "system" | "light" | "dark";
+/** Colour themes in index.css; each has a light and a dark variant. */
+export const palettes = ["workbench", "graphite", "indigo", "rose", "contrast"] as const;
+export type Palette = (typeof palettes)[number];
 export type SortKey = "name" | "kind" | "source" | "version" | "status" | "updated" | "cost" | "uses";
 /** "Show only" filters that cut across type and source. */
 export type Flag = "mod" | "issues" | "unused" | "hooks";
@@ -18,6 +22,8 @@ export interface Filters {
 
 export interface Prefs {
   theme: Theme;
+  palette: Palette;
+  language: LanguagePref;
   sort: { key: SortKey; desc: boolean };
   filters: Filters;
 }
@@ -26,6 +32,8 @@ export const emptyFilters: Filters = { kinds: [], statuses: [], sources: [], ori
 
 const defaults: Prefs = {
   theme: "system",
+  palette: "workbench",
+  language: "system",
   sort: { key: "status", desc: false },
   filters: emptyFilters,
 };
@@ -53,9 +61,10 @@ export function savePrefs(p: Prefs) {
 
 const media = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 
-export function applyTheme(theme: Theme) {
+export function applyTheme(theme: Theme, palette: Palette) {
   const dark = theme === "dark" || (theme === "system" && !!media?.matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.documentElement.dataset.palette = palette;
 }
 
 export function onSystemThemeChange(cb: () => void) {

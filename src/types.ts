@@ -64,7 +64,9 @@ export interface Issue {
     | "link-missing"
     | "link-replaced"
     | "duplicate-name";
+  /** English; the UI shows its own text for `code`, filled from `params`. */
   message: string;
+  params?: Record<string, string>;
 }
 
 export interface Upstream {
@@ -124,7 +126,12 @@ export interface Job {
 
 export interface Settings {
   projects: string[];
+  /** Off: check only when asked. */
   autoCheck: boolean;
+  checkInterval: "daily" | "weekly";
+  /** Closing the window hides it to the tray instead of quitting. */
+  closeToTray: boolean;
+  notifications: boolean;
 }
 
 export interface Environment {
@@ -135,6 +142,9 @@ export interface Environment {
   gh: string | null;
   os: string;
   version: string;
+  /** There's a tray icon to hide to. */
+  tray: boolean;
+  autostart: boolean;
 }
 
 // Mirrors src-tauri/src/updates/changelog.rs.
@@ -173,7 +183,11 @@ export interface Risk {
   kind: "hooks" | "mcp" | "scripts" | "allowedTools";
   /** Relative to the plugin or skill folder. */
   files: string[];
+  /** English; the UI shows its own text for `kind`. */
   why: string;
+  /** Allowed tools: what the update adds and removes. */
+  added?: string[];
+  removed?: string[];
 }
 
 // Mirrors src-tauri/src/mcp.rs.
@@ -234,6 +248,8 @@ export interface TraySummary {
   tokens: number | null;
   unused: number | null;
   appUpdate: string | null;
+  /** The `tray.` texts in the UI's language, for the menu, title and notifications. */
+  text: Record<string, string>;
 }
 
 export interface LastRun {

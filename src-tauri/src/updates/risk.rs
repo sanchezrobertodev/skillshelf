@@ -24,7 +24,13 @@ pub struct Risk {
     pub kind: RiskKind,
     /// Paths relative to the plugin or skill folder.
     pub files: Vec<String>,
+    /// English. The UI shows its own text for `kind`, plus `added` and `removed`.
     pub why: String,
+    /// Allowed tools an update adds or removes.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub added: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub removed: Vec<String>,
 }
 
 /// Before and after contents of a changed file; `None` where it doesn't exist.
@@ -77,6 +83,7 @@ pub fn assess(changed: &[String], contents: &Contents) -> Vec<Risk> {
         }
         details.extend(detail);
     };
+    let (mut tools_added, mut tools_removed) = (Vec::new(), Vec::new());
     for path in changed {
         if let Some(kind) = by_path(path) {
             add(kind, path, None);
@@ -98,6 +105,8 @@ pub fn assess(changed: &[String], contents: &Contents) -> Vec<Risk> {
                 let (b, a) = (allowed_tools(before.as_deref()), allowed_tools(after.as_deref()));
                 let added: Vec<&str> = a.iter().filter(|t| !b.contains(t)).map(String::as_str).collect();
                 let removed: Vec<&str> = b.iter().filter(|t| !a.contains(t)).map(String::as_str).collect();
+                tools_added.extend(added.iter().map(|t| t.to_string()));
+                tools_removed.extend(removed.iter().map(|t| t.to_string()));
                 if !added.is_empty() || !removed.is_empty() {
                     let mut parts = Vec::new();
                     if !added.is_empty() {
@@ -118,13 +127,26 @@ pub fn assess(changed: &[String], contents: &Contents) -> Vec<Risk> {
     }
     found
         .into_iter()
-        .map(|(kind, (files, details))| Risk {
-            kind,
-            files,
-            why: std::iter::once(why(kind).to_string())
-                .chain(details)
-                .collect::<Vec<_>>()
-                .join(" "),
+        .map(|(kind, (files, details))| {
+            let tools = kind == RiskKind::AllowedTools;
+            Risk {
+                kind,
+                files,
+                why: std::iter::once(why(kind).to_string())
+                    .chain(details)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                added: if tools {
+                    std::mem::take(&mut tools_added)
+                } else {
+                    Vec::new()
+                },
+                removed: if tools {
+                    std::mem::take(&mut tools_removed)
+                } else {
+                    Vec::new()
+                },
+            }
         })
         .collect()
 }
@@ -265,6 +287,13 @@ mod tests {
                 .ends_with("SKILL.md adds Bash(rm:*) and removes Bash(git log:*)."),
             "{}",
             r[1].why
+        );
+        assert_eq!(
+            (r[1].added.as_slice(), r[1].removed.as_slice()),
+            (
+                ["Bash(rm:*)".to_string()].as_slice(),
+                ["Bash(git log:*)".to_string()].as_slice()
+            )
         );
 
         // A version bump alone isn't a risk.

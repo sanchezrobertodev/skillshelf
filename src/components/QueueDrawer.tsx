@@ -1,28 +1,30 @@
 import clsx from "clsx";
 import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleSlash, Clock, LoaderCircle, ShieldQuestion, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { type TKey, useT } from "../i18n";
 import { useStore } from "../store";
 import type { Action, Job } from "../types";
 import { Button, card } from "./ui";
 
-const actionLabel: Record<Action, string> = {
-  update: "Update",
-  enable: "Enable",
-  disable: "Disable",
-  uninstall: "Uninstall",
-  reinstall: "Reinstall",
+const actionLabel: Record<Action, TKey> = {
+  update: "queue.action.update",
+  enable: "queue.action.enable",
+  disable: "queue.action.disable",
+  uninstall: "queue.action.uninstall",
+  reinstall: "queue.action.reinstall",
 };
 
-const stateMeta: Record<Job["state"], { label: string; icon: typeof Clock; cls: string }> = {
-  queued: { label: "Queued", icon: Clock, cls: "text-muted" },
-  running: { label: "Running", icon: LoaderCircle, cls: "text-info" },
-  success: { label: "Done", icon: CircleCheck, cls: "text-accent" },
-  failed: { label: "Failed", icon: CircleAlert, cls: "text-danger" },
-  needsConfirmation: { label: "Needs review", icon: ShieldQuestion, cls: "text-warn" },
-  cancelled: { label: "Stopped", icon: CircleSlash, cls: "text-muted" },
+const stateMeta: Record<Job["state"], { label: TKey; icon: typeof Clock; cls: string }> = {
+  queued: { label: "queue.state.queued", icon: Clock, cls: "text-muted" },
+  running: { label: "queue.state.running", icon: LoaderCircle, cls: "text-info" },
+  success: { label: "queue.state.success", icon: CircleCheck, cls: "text-accent" },
+  failed: { label: "queue.state.failed", icon: CircleAlert, cls: "text-danger" },
+  needsConfirmation: { label: "queue.state.needsConfirmation", icon: ShieldQuestion, cls: "text-warn" },
+  cancelled: { label: "queue.state.cancelled", icon: CircleSlash, cls: "text-muted" },
 };
 
 function JobRow({ job }: { job: Job }) {
+  const t = useT();
   const [open, setOpen] = useState(job.state === "failed");
   const confirm = useStore((s) => s.confirm);
   const log = useRef<HTMLPreElement>(null);
@@ -40,14 +42,14 @@ function JobRow({ job }: { job: Job }) {
     <li className="border-b border-border last:border-b-0">
       <div className="flex h-10 items-center gap-3 px-4 text-[13px]">
         <Icon aria-hidden className={clsx("size-4 shrink-0", meta.cls, job.state === "running" && "animate-spin")} />
-        <span className="w-20 shrink-0 text-muted">{actionLabel[job.action]}</span>
+        <span className="w-20 shrink-0 text-muted">{t(actionLabel[job.action])}</span>
         <span className="min-w-0 flex-1 truncate font-medium">{job.itemName}</span>
         <span className={clsx("hidden max-w-[40%] truncate text-xs sm:inline", job.state === "failed" ? "text-danger" : "text-muted")} title={job.message ?? undefined}>
-          {job.message ?? meta.label}
+          {job.message ?? t(meta.label)}
         </span>
         {job.state === "needsConfirmation" && (
           <Button size="sm" onClick={() => confirm({ type: "command", job })}>
-            Review
+            {t("queue.review")}
           </Button>
         )}
         {job.logs.length > 0 && (
@@ -57,7 +59,7 @@ function JobRow({ job }: { job: Job }) {
             aria-expanded={open}
             className="rounded px-1.5 py-0.5 text-xs text-muted hover:text-fg"
           >
-            {open ? "Hide log" : "Log"}
+            {open ? t("queue.hideLog") : t("queue.log")}
           </button>
         )}
       </div>
@@ -74,6 +76,7 @@ function JobRow({ job }: { job: Job }) {
 }
 
 export function QueueDrawer() {
+  const t = useT();
   const jobs = useStore((s) => s.jobs);
   const open = useStore((s) => s.queueOpen);
   const setOpen = useStore((s) => s.setQueueOpen);
@@ -91,7 +94,7 @@ export function QueueDrawer() {
   const batchDone = batch.length - batch.filter((j) => j.state === "queued" || j.state === "running").length;
 
   return (
-    <section aria-label="Action queue" className={clsx("mx-5 mb-4 shrink-0 overflow-hidden", card)}>
+    <section aria-label={t("queue.label")} className={clsx("mx-5 mb-4 shrink-0 overflow-hidden", card)}>
       <div className="flex h-10 items-center gap-3 px-4">
         <button
           type="button"
@@ -100,30 +103,30 @@ export function QueueDrawer() {
           className="flex items-center gap-2 rounded text-[13px] font-medium"
         >
           {open ? <ChevronDown aria-hidden className="size-4" /> : <ChevronUp aria-hidden className="size-4" />}
-          Activity
+          {t("queue.activity")}
         </button>
         <span className="flex items-center gap-3 text-xs text-muted" aria-live="polite">
           {active > 0 && (
             <span className="flex items-center gap-1 text-info">
               <LoaderCircle aria-hidden className="size-3.5 animate-spin" />
-              {active} left
+              {t("queue.left", { count: active })}
             </span>
           )}
-          {done > 0 && <span>{done} done</span>}
-          {failed > 0 && <span className="text-danger">{failed} failed</span>}
+          {done > 0 && <span>{t("queue.done", { count: done })}</span>}
+          {failed > 0 && <span className="text-danger">{t("queue.failed", { count: failed })}</span>}
         </span>
         {active > 0 && batch.length > 1 && (
           <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted">
             <span className="shrink-0 tabular-nums">
-              {Math.min(batchDone + 1, batch.length)} of {batch.length}
+              {t("queue.position", { current: Math.min(batchDone + 1, batch.length), total: batch.length })}
             </span>
             <div
               role="progressbar"
-              aria-label="Batch progress"
+              aria-label={t("queue.progress")}
               aria-valuemin={0}
               aria-valuemax={batch.length}
               aria-valuenow={batchDone}
-              aria-valuetext={`${batchDone} of ${batch.length} finished`}
+              aria-valuetext={t("queue.finished", { count: batchDone, total: batch.length })}
               className="h-1.5 max-w-48 flex-1 overflow-hidden rounded-full bg-border"
             >
               <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${(batchDone / batch.length) * 100}%` }} />
@@ -134,11 +137,11 @@ export function QueueDrawer() {
           {active > 0 && (
             <Button size="sm" variant="secondary" onClick={() => void stop()}>
               <Square aria-hidden className="size-3 fill-current" />
-              Stop
+              {t("queue.stop")}
             </Button>
           )}
           <Button size="sm" variant="ghost" disabled={active === list.length} onClick={clear}>
-            Clear finished
+            {t("queue.clearFinished")}
           </Button>
         </span>
       </div>

@@ -2,7 +2,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
 import { ArrowDown, ArrowUp, ArrowUpDown, CircleAlert, Download, FilterX, Power, PowerOff, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { canToggle, canUninstall, canUpdate, relativeTime, sourceLabel } from "../lib/format";
+import { t, useT } from "../i18n";
+import { canToggle, canUninstall, canUpdate, issueText, kindLabel, relativeTime, sourceLabel } from "../lib/format";
 import { loadsEverywhere, shortCount } from "../lib/insights";
 import type { SortKey } from "../lib/prefs";
 import { useStore } from "../store";
@@ -52,9 +53,9 @@ function template(cols: Set<Col>) {
 }
 
 function costTitle(item: Item) {
-  if (item.enabled === false) return "Off, so it adds nothing now. Estimated tokens when on";
-  if (!loadsEverywhere(item)) return "Loads only in its project. Estimated tokens per session there";
-  return "Estimated tokens it adds to every session";
+  if (item.enabled === false) return t("list.costOff");
+  if (!loadsEverywhere(item)) return t("list.costProject");
+  return t("list.costEvery");
 }
 
 function SortHeader({ label, k, className }: { label: string; k: SortKey; className?: string }) {
@@ -80,6 +81,7 @@ function SortHeader({ label, k, className }: { label: string; k: SortKey; classN
 }
 
 function VersionCell({ item }: { item: Item }) {
+  const t = useT();
   const update = item.status === "updateAvailable" && item.latest && item.latest !== item.version;
   return (
     <div className="flex min-w-0 items-center gap-1.5 font-mono text-xs">
@@ -88,7 +90,7 @@ function VersionCell({ item }: { item: Item }) {
       </span>
       {update && (
         <>
-          <span aria-label="to" className="text-muted">
+          <span aria-label={t("list.versionTo")} className="text-muted">
             →
           </span>
           <span className="truncate font-medium text-warn" title={item.latest ?? undefined}>
@@ -102,6 +104,7 @@ function VersionCell({ item }: { item: Item }) {
 
 /** The Enabled switch and an Update button, so the common actions don't need the details panel. */
 function RowActions({ item, busy }: { item: Item; busy: boolean }) {
+  const t = useT();
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
   return (
@@ -110,8 +113,8 @@ function RowActions({ item, busy }: { item: Item; busy: boolean }) {
         <button
           type="button"
           tabIndex={-1}
-          aria-label={`Update ${item.name}`}
-          title={`Update ${item.name}`}
+          aria-label={t("list.update", { name: item.name })}
+          title={t("list.update", { name: item.name })}
           disabled={busy}
           onClick={(e) => {
             e.stopPropagation();
@@ -125,7 +128,7 @@ function RowActions({ item, busy }: { item: Item; busy: boolean }) {
       {canToggle(item) && (
         <Switch
           tabIndex={-1}
-          label={`${item.name} enabled`}
+          label={t("list.enabled", { name: item.name })}
           checked={item.enabled !== false}
           disabled={busy}
           onChange={() => void run([{ itemId: item.id, action: item.enabled === false ? "enable" : "disable" }])}
@@ -136,6 +139,7 @@ function RowActions({ item, busy }: { item: Item; busy: boolean }) {
 }
 
 function BulkBar({ items }: { items: Item[] }) {
+  const t = useT();
   const setSelected = useStore((s) => s.setSelected);
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
@@ -145,11 +149,11 @@ function BulkBar({ items }: { items: Item[] }) {
   return (
     <div
       role="toolbar"
-      aria-label="Bulk actions"
+      aria-label={t("list.bulkActions")}
       className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface-2 px-4"
     >
       <span className="mr-2 text-[13px] font-medium" aria-live="polite">
-        {items.length} selected
+        {t("list.selected", { count: items.length })}
       </span>
       <Button
         size="sm"
@@ -158,7 +162,7 @@ function BulkBar({ items }: { items: Item[] }) {
         onClick={() => confirm({ type: "update", items: updatable })}
       >
         <Download aria-hidden className="size-3.5" />
-        Update{updatable.length ? ` ${updatable.length}` : ""}
+        {updatable.length ? t("list.updateCount", { count: updatable.length }) : t("list.updateNone")}
       </Button>
       <Button
         size="sm"
@@ -168,7 +172,7 @@ function BulkBar({ items }: { items: Item[] }) {
         }
       >
         <Power aria-hidden className="size-3.5" />
-        Enable
+        {t("list.enable")}
       </Button>
       <Button
         size="sm"
@@ -178,15 +182,15 @@ function BulkBar({ items }: { items: Item[] }) {
         }
       >
         <PowerOff aria-hidden className="size-3.5" />
-        Disable
+        {t("list.disable")}
       </Button>
       <Button size="sm" variant="danger" disabled={!removable.length} onClick={() => confirm({ type: "uninstall", items: removable })}>
         <Trash2 aria-hidden className="size-3.5" />
-        Uninstall
+        {t("list.uninstall")}
       </Button>
       <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setSelected([])}>
         <X aria-hidden className="size-3.5" />
-        Clear selection
+        {t("list.clearSelection")}
       </Button>
     </div>
   );
@@ -210,6 +214,7 @@ function SkeletonRows() {
 }
 
 export function ItemList({ rows }: { rows: Item[] }) {
+  const t = useT();
   const busy = useStore((s) => s.busy);
   const total = useStore((s) => s.items.length);
   const selected = useStore((s) => s.selected);
@@ -318,12 +323,12 @@ export function ItemList({ rows }: { rows: Item[] }) {
   };
 
   return (
-    <section ref={wrap} aria-label="Installed items" className={clsx("flex min-w-0 flex-1 flex-col overflow-hidden", card)}>
+    <section ref={wrap} aria-label={t("list.installed")} className={clsx("flex min-w-0 flex-1 flex-col overflow-hidden", card)}>
       {selectedRows.length > 0 && <BulkBar items={selectedRows} />}
 
       <div
         role="grid"
-        aria-label="Skills and plugins"
+        aria-label={t("list.grid")}
         aria-rowcount={rows.length + 1}
         aria-multiselectable="true"
         aria-activedescendant={activeIndex >= 0 ? `row-${rows[activeIndex].id}` : undefined}
@@ -339,21 +344,21 @@ export function ItemList({ rows }: { rows: Item[] }) {
         >
           <div role="columnheader" className="flex items-center">
             <Checkbox
-              label={allSelected ? "Deselect all" : "Select all shown"}
+              label={allSelected ? t("list.deselectAll") : t("list.selectAll")}
               checked={allSelected}
               indeterminate={selectedRows.length > 0 && !allSelected}
               onChange={() => setSelected(allSelected ? [] : rows.map((r) => r.id))}
             />
           </div>
-          <SortHeader label="Name" k="name" />
-          {cols.has("source") && <SortHeader label="Source" k="source" />}
-          {cols.has("version") && <SortHeader label="Version" k="version" />}
-          <SortHeader label="Status" k="status" />
-          {cols.has("cost") && <SortHeader label="Cost" k="cost" />}
-          {cols.has("uses") && <SortHeader label="Uses" k="uses" />}
-          {cols.has("updated") && <SortHeader label="Updated" k="updated" />}
+          <SortHeader label={t("list.colName")} k="name" />
+          {cols.has("source") && <SortHeader label={t("list.colSource")} k="source" />}
+          {cols.has("version") && <SortHeader label={t("list.colVersion")} k="version" />}
+          <SortHeader label={t("list.colStatus")} k="status" />
+          {cols.has("cost") && <SortHeader label={t("list.colCost")} k="cost" />}
+          {cols.has("uses") && <SortHeader label={t("list.colUses")} k="uses" />}
+          {cols.has("updated") && <SortHeader label={t("list.colUpdated")} k="updated" />}
           <div role="columnheader" className="text-right text-xs font-semibold tracking-wide text-muted uppercase">
-            <span className="sr-only">Actions</span>
+            <span className="sr-only">{t("list.colActions")}</span>
           </div>
         </div>
 
@@ -363,15 +368,13 @@ export function ItemList({ rows }: { rows: Item[] }) {
           ) : rows.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
               <FilterX aria-hidden className="size-8 text-muted" />
-              <p className="font-medium">{total ? "Nothing matches these filters" : "No skills or plugins found"}</p>
+              <p className="font-medium">{total ? t("list.noMatch") : t("list.empty")}</p>
               <p className="max-w-sm text-[13px] text-muted">
-                {total
-                  ? "Try a different search, or clear the filters to see everything."
-                  : "Skillshelf looks in ~/.claude for plugins and skills. Install something with claude plugin install or npx skills add, then refresh."}
+                {total ? t("list.noMatchHint") : t("list.emptyHint")}
               </p>
               {total > 0 && (
                 <Button size="sm" onClick={clearFilters}>
-                  Clear filters
+                  {t("list.clearFilters")}
                 </Button>
               )}
             </div>
@@ -400,18 +403,18 @@ export function ItemList({ rows }: { rows: Item[] }) {
                     style={{ height: ROW_HEIGHT, transform: `translateY(${v.start}px)`, gridTemplateColumns: grid }}
                   >
                     <div role="gridcell" className="flex items-center">
-                      <Checkbox label={`Select ${item.name}`} checked={isSelected} onChange={() => toggleSelected(item.id)} />
+                      <Checkbox label={t("list.select", { name: item.name })} checked={isSelected} onChange={() => toggleSelected(item.id)} />
                     </div>
                     <div role="gridcell" className="min-w-0">
                       <div className="flex items-center gap-2">
                         <KindIcon kind={item.kind} className="size-4" />
                         <span className="truncate font-medium">{item.name}</span>
                         {item.enabled === false && (
-                          <span className="rounded border border-border-strong px-1.5 text-[11px] text-muted">Disabled</span>
+                          <span className="rounded border border-border-strong px-1.5 text-[11px] text-muted">{t("list.disabled")}</span>
                         )}
                         {item.isMod && (
                           <span
-                            title="Changes Claude Code itself: its hooks/hooks.json loads modules"
+                            title={t("list.modTitle")}
                             className="rounded border border-info/30 bg-info/10 px-1.5 text-[11px] font-medium text-info"
                           >
                             Mod
@@ -419,16 +422,16 @@ export function ItemList({ rows }: { rows: Item[] }) {
                         )}
                         {item.issues.length > 0 && (
                           <span
-                            title={item.issues.map((i) => i.message).join("\n")}
+                            title={item.issues.map(issueText).join("\n")}
                             className="inline-flex shrink-0 items-center gap-1 rounded border border-danger/35 bg-danger/10 px-1.5 text-[11px] font-medium text-danger"
                           >
                             <CircleAlert aria-hidden className="size-3" />
-                            {item.issues.length === 1 ? "1 issue" : `${item.issues.length} issues`}
+                            {t("list.issues", { count: item.issues.length })}
                           </span>
                         )}
-                        <span className="sr-only">{item.kind}</span>
+                        <span className="sr-only">{kindLabel[item.kind]}</span>
                       </div>
-                      <p className="truncate pl-6 text-xs text-muted">{item.description ?? "No description"}</p>
+                      <p className="truncate pl-6 text-xs text-muted">{item.description ?? t("list.noDescription")}</p>
                     </div>
                     {cols.has("source") && (
                       <div role="gridcell" className="min-w-0 text-[13px]">
@@ -456,8 +459,8 @@ export function ItemList({ rows }: { rows: Item[] }) {
                       </div>
                     )}
                     {cols.has("uses") && (
-                      <div role="gridcell" title="Uses in the last 30 days, from your local transcripts" className="font-mono text-xs tabular-nums">
-                        {usage ? (usage[item.id]?.uses ?? 0) : <span className="text-muted" aria-label="Counting">…</span>}
+                      <div role="gridcell" title={t("list.usesTitle")} className="font-mono text-xs tabular-nums">
+                        {usage ? (usage[item.id]?.uses ?? 0) : <span className="text-muted" aria-label={t("list.counting")}>…</span>}
                       </div>
                     )}
                     {cols.has("updated") && (
@@ -477,10 +480,8 @@ export function ItemList({ rows }: { rows: Item[] }) {
       </div>
 
       <footer className="flex h-8 shrink-0 items-center gap-4 border-t border-border bg-surface px-4 text-xs text-muted">
-        <span>
-          Showing {rows.length} of {total}
-        </span>
-        <span className="hidden md:inline">↑↓ move · Space select · Enter details · Shift F10 actions · Ctrl A select all</span>
+        <span>{t("list.showing", { shown: rows.length, total })}</span>
+        <span className="hidden md:inline">{t("list.keys")}</span>
       </footer>
       {menu && <ContextMenu target={menu} onClose={closeMenu} />}
     </section>

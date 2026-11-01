@@ -5,15 +5,17 @@ import { useAppUpdate } from "./appUpdate";
 import { AppUpdateBanner, ReleaseNotesDialog } from "./components/AppUpdate";
 import { CleanUp } from "./components/CleanUp";
 import { DetailPanel } from "./components/DetailPanel";
-import { ConfirmDialogs, SettingsDialog } from "./components/Dialogs";
+import { ConfirmDialogs } from "./components/Dialogs";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { ItemList } from "./components/ItemList";
 import { McpServers } from "./components/McpServers";
 import { Overview } from "./components/Overview";
 import { QueueDrawer } from "./components/QueueDrawer";
 import { Rail } from "./components/Rail";
+import { Settings } from "./components/Settings";
 import { Toolbar } from "./components/Toolbar";
 import { IconButton } from "./components/ui";
+import { useT } from "./i18n";
 import { matches, sortItems } from "./lib/filter";
 import { applyTheme, onSystemThemeChange } from "./lib/prefs";
 import { useStore } from "./store";
@@ -40,12 +42,13 @@ function Banner({
   const Icon = tone === "danger" ? CircleAlert : tone === "warn" ? TriangleAlert : RotateCcw;
   const cls = { warn: "border-warn/35 bg-warn/10", danger: "border-danger/40 bg-danger/10", info: "border-info/35 bg-info/10" }[tone];
   const icon = { warn: "text-warn", danger: "text-danger", info: "text-info" }[tone];
+  const t = useT();
   return (
     <div role={tone === "danger" ? "alert" : "status"} className={`mx-5 mb-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[13px] ${cls}`}>
       <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${icon}`} />
       <div className="min-w-0 flex-1">{children}</div>
       {onDismiss && (
-        <IconButton label="Dismiss" className="-my-1 size-7" onClick={onDismiss}>
+        <IconButton label={t("common.dismiss")} className="-my-1 size-7" onClick={onDismiss}>
           <X className="size-3.5" />
         </IconButton>
       )}
@@ -64,6 +67,8 @@ export default function App() {
   const error = useStore((s) => s.error);
   const restartNeeded = useStore((s) => s.restartNeeded);
   const theme = useStore((s) => s.theme);
+  const palette = useStore((s) => s.palette);
+  const t = useT();
   const screen = useStore((s) => s.screen);
   const usage = useStore((s) => s.usage);
   const wide = useWide(1240);
@@ -78,7 +83,10 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => (theme === "system" ? onSystemThemeChange(() => applyTheme("system")) : undefined), [theme]);
+  useEffect(
+    () => (theme === "system" ? onSystemThemeChange(() => applyTheme("system", palette)) : undefined),
+    [theme, palette],
+  );
 
   const rows = useMemo(
     () => sortItems(items.filter((i) => matches(i, filters, query, usage)), sort.key, sort.desc, usage),
@@ -99,7 +107,7 @@ export default function App() {
         )}
         {restartNeeded && (
           <Banner tone="info" onDismiss={() => useStore.getState().dismissRestart()}>
-            Plugin changes take effect after you restart Claude Code.
+            {t("app.restartNeeded")}
           </Banner>
         )}
         {warnings.length > 0 && (
@@ -119,13 +127,14 @@ export default function App() {
           <Overview />
         ) : screen === "cleanup" ? (
           <CleanUp />
-        ) : (
+        ) : screen === "mcp" ? (
           <McpServers />
+        ) : (
+          <Settings />
         )}
         <QueueDrawer />
       </main>
       <ConfirmDialogs />
-      <SettingsDialog />
       <ReleaseNotesDialog />
     </div>
   );

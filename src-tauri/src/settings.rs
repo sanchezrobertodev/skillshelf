@@ -9,8 +9,30 @@ use serde::{Deserialize, Serialize};
 pub struct Settings {
     /// Project folders whose `.claude/skills` are scanned too.
     pub projects: Vec<String>,
-    /// Check for updates automatically after each scan.
+    /// Check for updates at launch and every `check_interval`. Off: only when asked.
     pub auto_check: bool,
+    pub check_interval: CheckInterval,
+    /// Closing the window hides it to the tray instead of quitting.
+    pub close_to_tray: bool,
+    /// Announce new updates with an OS notification.
+    pub notifications: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CheckInterval {
+    Daily,
+    Weekly,
+}
+
+impl CheckInterval {
+    pub fn ms(self) -> u64 {
+        const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+        match self {
+            CheckInterval::Daily => DAY_MS,
+            CheckInterval::Weekly => 7 * DAY_MS,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -18,6 +40,9 @@ impl Default for Settings {
         Settings {
             projects: Vec::new(),
             auto_check: true,
+            check_interval: CheckInterval::Daily,
+            close_to_tray: true,
+            notifications: true,
         }
     }
 }
@@ -36,5 +61,18 @@ impl Settings {
         }
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(file, json).map_err(|e| format!("could not save settings: {e}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_from_older_versions_keep_their_values() {
+        let s: Settings = serde_json::from_str(r#"{"projects":["C:\\p"],"autoCheck":false}"#).unwrap();
+        assert_eq!((s.projects.len(), s.auto_check), (1, false));
+        assert_eq!(s.check_interval, CheckInterval::Daily);
+        assert!(s.close_to_tray && s.notifications);
     }
 }

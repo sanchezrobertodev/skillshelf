@@ -1,0 +1,30 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Library
+        2. Click Update on …
+  - type: input
+    id: version
+    attributes:
+      label: Skillshelf version and OS
+      description: Shown in Settings → About, for example "Skillshelf 0.2.0 · windows".
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or screenshots
+      description: Activity output, error messages or screenshots. Remove anything private, such as tokens or paths you don't want to share.

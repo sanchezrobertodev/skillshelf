@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Download, ExternalLink, FolderOpen, Power, PowerOff, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, errorText } from "../api";
+import { type TKey, useT } from "../i18n";
 import { canReinstall, canToggle, canUninstall } from "../lib/format";
 import { updatable, useStore } from "../store";
 import type { Item } from "../types";
@@ -22,6 +23,7 @@ interface Entry {
 
 /** Row actions at the pointer (or under the active row for Shift+F10 / the Menu key). */
 export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: () => void }) {
+  const t = useT();
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
   const menu = useRef<HTMLDivElement>(null);
@@ -29,7 +31,7 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
 
   const { items } = target;
   const one = items.length === 1 ? items[0] : null;
-  const count = (n: number) => (items.length > 1 ? ` ${n}` : "");
+  const label = (key: TKey, many: TKey, n: number) => (items.length > 1 ? t(many, { count: n }) : t(key));
   const toUpdate = updatable(items);
   const off = items.filter((i) => canToggle(i) && i.enabled === false);
   const on = items.filter((i) => canToggle(i) && i.enabled === true);
@@ -38,13 +40,13 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
   const attempt = (fn: () => Promise<void>) => fn().catch((e) => useStore.setState({ error: errorText(e) }));
 
   const entries: Entry[] = [
-    toUpdate.length && { label: `Update${count(toUpdate.length)}…`, icon: Download, act: () => confirm({ type: "update", items: toUpdate }) },
-    movable.length && { label: `Reinstall${count(movable.length)}`, icon: RotateCcw, act: () => void run(movable.map((i) => ({ itemId: i.id, action: "reinstall" as const }))) },
-    off.length && { label: `Turn on${count(off.length)}`, icon: Power, act: () => void run(off.map((i) => ({ itemId: i.id, action: "enable" as const }))) },
-    on.length && { label: `Turn off${count(on.length)}`, icon: PowerOff, act: () => void run(on.map((i) => ({ itemId: i.id, action: "disable" as const }))) },
-    one?.path && { label: "Open folder", icon: FolderOpen, act: () => attempt(() => api.openFolder(one.id)) },
-    one?.repoUrl && { label: "Open repo", icon: ExternalLink, act: () => attempt(() => api.openRepo(one.id)) },
-    removable.length && { label: `Uninstall${count(removable.length)}…`, icon: Trash2, danger: true, act: () => confirm({ type: "uninstall", items: removable }) },
+    toUpdate.length && { label: label("menu.update", "menu.updateMany", toUpdate.length), icon: Download, act: () => confirm({ type: "update", items: toUpdate }) },
+    movable.length && { label: label("menu.reinstall", "menu.reinstallMany", movable.length), icon: RotateCcw, act: () => void run(movable.map((i) => ({ itemId: i.id, action: "reinstall" as const }))) },
+    off.length && { label: label("menu.turnOn", "menu.turnOnMany", off.length), icon: Power, act: () => void run(off.map((i) => ({ itemId: i.id, action: "enable" as const }))) },
+    on.length && { label: label("menu.turnOff", "menu.turnOffMany", on.length), icon: PowerOff, act: () => void run(on.map((i) => ({ itemId: i.id, action: "disable" as const }))) },
+    one?.path && { label: t("menu.openFolder"), icon: FolderOpen, act: () => attempt(() => api.openFolder(one.id)) },
+    one?.repoUrl && { label: t("menu.openRepo"), icon: ExternalLink, act: () => attempt(() => api.openRepo(one.id)) },
+    removable.length && { label: label("menu.uninstall", "menu.uninstallMany", removable.length), icon: Trash2, danger: true, act: () => confirm({ type: "uninstall", items: removable }) },
   ].filter((e): e is Entry => !!e);
 
   // Keep the menu inside the window.
@@ -93,13 +95,13 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
     <div
       ref={menu}
       role="menu"
-      aria-label={one ? `${one.name} actions` : `Actions for ${items.length} items`}
+      aria-label={one ? t("menu.itemActions", { name: one.name }) : t("menu.itemsActions", { count: items.length })}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}
       style={pos}
       className="fixed z-40 min-w-48 rounded-lg border border-card-border bg-surface p-1 shadow-2xl"
     >
-      {entries.length === 0 && <p className="px-2.5 py-1.5 text-[13px] text-muted">No actions for this item</p>}
+      {entries.length === 0 && <p className="px-2.5 py-1.5 text-[13px] text-muted">{t("menu.none")}</p>}
       {entries.map((e) => (
         <button
           key={e.label}
