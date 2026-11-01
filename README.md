@@ -4,12 +4,20 @@
 
 A desktop app for the skills and plugins you've installed for Claude Code. It runs on Windows, macOS and Linux. You can:
 
-- **See everything in one list**: marketplace plugins, plugins your claude.ai organization syncs to you, skills installed with the [`skills` CLI](https://skills.sh), hand-made skills in `~/.claude/skills`, and skills in project folders you add.
-- **Check what's out of date**: Skillshelf compares each item with its upstream source (see below).
-- **See what changed** before you update: commits and release notes between your version and the latest (see below).
-- **Update** one item, a selection, or everything with **Update all**.
-- **Filter, sort and search** by type, status, source, marketplace/repo and on/off state. Each filter option shows a count.
-- **Enable/disable** plugins, **uninstall** items (always with a confirmation), and open an item's folder or source repo.
+- **See everything in one list**: marketplace plugins, plugins your claude.ai organization syncs to you, skills installed with the [`skills` CLI](https://skills.sh), hand-made skills in `~/.claude/skills`, and skills in project folders you add. Claude Code mods get a **Mod** tag.
+- **Start from the Overview**: pending updates, context cost per session and the heaviest items, unused plugins, MCP server problems, skill health issues and skills that changed upstream.
+- **Check what's out of date** at launch and once a day. Skillshelf compares each item with its upstream source (see below) and sends one notification per new update.
+- **Review before you update**: commits and release notes between your version and the latest, plus risk flags when an update changes hooks, MCP servers, scripts or a skill's allowed tools (see below).
+- **Update** one item from its row, the right-click menu, the details panel or the tray, or several with **Update all**: a review sheet where you untick what to skip. A batch shows its progress and has a **Stop** button.
+- **See what each item costs**: an estimate of the tokens it adds to every session, and how often you used it in the last 30 days, counted from your local transcripts (see below).
+- **Clean up**: unused plugins, plugins with hooks, org-managed plugins (locked), and skills that moved or were removed upstream, with Turn off, Uninstall and Reinstall.
+- **Check MCP servers**: each server's status, grouped by plugin, with the reason when it can't connect.
+- **Filter, sort and search** by type, status, source, marketplace/repo, on/off state, and Unused, Has issues, Has hooks or Mods. Sort by context cost or uses too. Each filter option shows a count.
+- **Turn plugins on and off**, **uninstall** items (always with a confirmation), and open an item's folder or source repo.
+
+Closing the window keeps Skillshelf in the tray (menu bar on macOS), so daily checks and notifications keep running. The tray menu lists pending updates and has **Check now**, **Update all** and **Quit**.
+
+![Overview](docs/screenshot-light.png)
 
 ## How update checks work
 
@@ -26,17 +34,28 @@ Plugin changes apply after you restart Claude Code. The app shows a reminder whe
 
 ## What changed
 
-When you open an item with an update, the detail panel lists what changed since your version. The update confirmation shows a one-line summary. Skillshelf looks this up only when you open an item, never during the update check.
+When you open an item with an update, the details panel lists what changed since your version, and the **Update all** review sheet shows the same list for each item. Skillshelf looks this up only when you open an item or the review sheet, never during the update check.
 
 | Source | Where the list comes from |
 |---|---|
 | Marketplace plugin | `git log <installed commit>..HEAD -- <plugin folder>` in the local marketplace copy. Claude Code clones marketplaces shallowly, so when the installed commit isn't there and the marketplace is on GitHub, the same list comes from the GitHub API (two requests). If the plugin folder has a `CHANGELOG.md`, the releases newer than your version are shown too |
 | Plugin pinned to a commit of its own GitHub repo | GitHub compare API, installed commit to latest |
-| `skills` CLI skill | Commits that touched the skill's folder since your last update (`updatedAt` in the lockfile), one GitHub request |
+| `skills` CLI skill | Commits that touched the skill's folder, newest first. Skillshelf finds your version by comparing the folder's tree hash at each commit with `skillFolderHash` in the lockfile (up to 30 lookups); the newer commits are what's new |
 | Skill with `skill-release.json` | The `changelog` or `changelogUrl` field (see below) |
 | Org-synced plugin, local or project skill | Shown as "No changelog available". There's no upstream history to read |
 
 Results are cached until the item's version changes, so reopening an item doesn't cost another request.
+
+### Risk flags
+
+The same lookup compares your version with the latest and flags four kinds of change. Hover or focus a flag to see the files and why it matters.
+
+| Flag | Files |
+|---|---|
+| Hooks | `hooks/hooks.json`, or `hooks` in `plugin.json` |
+| MCP servers | `.mcp.json`, or `mcpServers` in `plugin.json` |
+| Scripts | shell, PowerShell, Python, JavaScript/TypeScript, Ruby, Perl, `.cmd`, `.bat`, `.exe`, and anything under `bin/` or `scripts/` |
+| Allowed tools | a skill's `allowed-tools` front matter |
 
 ### Changelogs for `skill-release.json`
 
@@ -54,6 +73,16 @@ A skill that ships an update manifest can publish release notes in one of two op
 - `changelog`: the markdown inline, as a string.
 
 Use one heading per release with the version in it (`## 1.4.0`, `## [1.4.0] - 2026-10-01`, `## v1.4.0`). Skillshelf shows the releases newer than the installed version, up to the latest. A changelog without version headings is shown whole.
+
+## Context cost and usage
+
+- **Context cost** estimates the tokens an item adds to every session: the names and descriptions of its skills, commands and agents, which Claude Code always sends. It counts about 4 characters per token, so treat it as a rough guide. MCP tool definitions and hook output can't be known without running them, so they aren't counted. The total is in the window title.
+- **Usage** counts skill, command, agent and plugin MCP calls in your session transcripts (`~/.claude/projects/**/*.jsonl`). The first count reads them all in the background; after that, only what was added since. The counts are cached in the app data folder. The code that reads them makes no network requests: your transcripts never leave your PC.
+- **Unused** means a plugin that is on and had no uses in 30 days. Plugins with hooks (mods included) and org-managed plugins never count as unused: hooks don't show up in transcripts, and org-managed plugins can't be uninstalled.
+
+## Uninstalling
+
+Every uninstall asks first. Claude Code keeps a folder for each plugin, `~/.claude/plugins/data/<plugin>`, for its settings, caches and downloads. When that folder has files, the confirmation shows its size and asks whether to delete it too (unticked by default). Skills installed with the `skills` CLI are unlinked from Claude Code only, and local skills go to the OS trash.
 
 Sometimes a marketplace declares its own install command for an update. When that happens, Skillshelf shows you the exact command and its hash and runs it only if you approve. It never passes `-y` blindly.
 
@@ -85,11 +114,15 @@ Skillshelf updates itself with the [Tauri updater](https://v2.tauri.app/plugin/u
 
 What's new comes from [CHANGELOG.md](CHANGELOG.md).
 
+### Running from a clone
+
+A copy you built yourself and run from the clone (`src-tauri/target/…`) updates from git instead. It checks origin's default branch on launch and once a day. **Update & restart** runs `git pull --ff-only`, `npm ci` and `npm run tauri build -- --no-bundle`, then starts the new build and quits. It refuses, and says why in **Settings → App updates**, when the clone is on another branch, has commits origin doesn't, or has uncommitted changes, so your own work is never touched.
+
 ## Requirements
 
 - `claude` (Claude Code CLI) on `PATH`, needed for plugins
 - `node`/`npx`, needed to update skills installed with the `skills` CLI
-- `git`, used for plugin version comparison
+- `git`, used for plugin version comparison and for updating a copy that runs from its clone
 - `gh` (optional), raises the GitHub rate limit
 
 The environment section in **Settings** shows which of these were found.
@@ -148,11 +181,17 @@ CI signs with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The matching pu
 ```
 src-tauri/src/
   scan/        offline discovery of plugins and skills
-  updates/     marketplace / GitHub update checks
+  updates/     update checks, what changed, risk flags
   actions.rs   update, enable, disable, uninstall (fixed argument lists, validated ids)
+  cost.rs      context cost estimate
+  usage.rs     uses counted from local transcripts (no network)
+  health.rs    skill health checks
+  mcp.rs       MCP server status from `claude mcp list` (hosts only)
+  tray.rs      tray menu and notifications
+  selfupdate.rs  updating a copy that runs from its git clone
   proc.rs      runs CLIs without a shell or console window
 src/
-  components/  toolbar, filter sidebar, virtualized list, detail panel, activity queue, dialogs
+  components/  rail, Overview, Library (list, filters, details panel), Clean Up, MCP, review sheet, queue, dialogs
   store.ts     app state (zustand)
 design-system/ design tokens and rules (ui-ux-pro-max)
 ```

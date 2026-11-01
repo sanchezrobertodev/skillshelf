@@ -28,6 +28,7 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 - The Library gets **Cost** and **Uses** columns (shown when the window is wide enough) and **Show only** filters: Unused, Has issues, Has hooks and Mods.
 - The details panel adds the cost breakdown, a 30-day usage chart, a SKILL.md or README preview, the last action's output, and the commit your installed version matches.
 - **Reinstall** for skills that moved upstream, in the details panel, the right-click menu and Clean Up.
+- Updates for a copy built from its git clone. Skillshelf checks the clone's default branch on launch and once a day, and **Update & restart** runs `git pull`, `npm ci` and a release build, then reopens. It refuses, and says why, when the clone is on another branch, has commits origin doesn't, or has uncommitted changes. Installed copies keep using signed releases.
 
 ### Changed
 

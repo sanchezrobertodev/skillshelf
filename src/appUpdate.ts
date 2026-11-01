@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api, errorText } from "./api";
-import type { AppUpdate, DownloadProgress } from "./types";
+import type { AppUpdate, CloneStatus, DownloadProgress } from "./types";
 
 /** Skillshelf's own updates (the Tauri updater), separate from skill/plugin updates in store.ts. */
 export type AppUpdatePhase = "idle" | "checking" | "upToDate" | "available" | "installing" | "error";
@@ -8,6 +8,10 @@ export type AppUpdatePhase = "idle" | "checking" | "upToDate" | "available" | "i
 interface AppUpdateState {
   phase: AppUpdatePhase;
   update: AppUpdate | null;
+  /** Set when running from the git clone; then updates pull and rebuild instead of using releases. */
+  clone: CloneStatus | null;
+  /** Output of the clone update. */
+  log: string[];
   progress: DownloadProgress | null;
   error: string | null;
   /** The error came from installing, not checking. */
@@ -26,6 +30,8 @@ interface AppUpdateState {
 export const useAppUpdate = create<AppUpdateState>((set, get) => ({
   phase: "idle",
   update: null,
+  clone: null,
+  log: [],
   progress: null,
   error: null,
   installFailed: false,
@@ -37,6 +43,11 @@ export const useAppUpdate = create<AppUpdateState>((set, get) => ({
     if (phase === "checking" || phase === "installing") return;
     set({ phase: "checking", error: null, installFailed: false });
     try {
+      const clone = await api.cloneStatus();
+      if (clone) {
+        set({ clone, phase: clone.behind ? "available" : "upToDate", dismissed: opts?.quiet ? get().dismissed : false });
+        return;
+      }
       const update = await api.checkAppUpdate();
       set({ update, phase: update ? "available" : "upToDate", dismissed: opts?.quiet ? get().dismissed : false });
     } catch (e) {
@@ -46,6 +57,17 @@ export const useAppUpdate = create<AppUpdateState>((set, get) => ({
   },
 
   install: async () => {
+    const { clone } = get();
+    if (clone) {
+      if (get().phase === "installing" || clone.blocked || !clone.behind) return;
+      set({ phase: "installing", log: [], error: null, installFailed: false, notesOpen: false, dismissed: false });
+      try {
+        await api.cloneUpdate((line) => set((s) => ({ log: [...s.log.slice(-199), line] })));
+      } catch (e) {
+        set({ phase: "error", error: errorText(e), installFailed: true });
+      }
+      return;
+    }
     if (get().phase === "installing" || !get().update) return;
     set({ phase: "installing", progress: null, error: null, installFailed: false, notesOpen: false, dismissed: false });
     try {

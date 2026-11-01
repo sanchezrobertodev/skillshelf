@@ -244,6 +244,18 @@ export interface LastRun {
   finishedAt: number;
 }
 
+/** Skillshelf running from its git clone, compared with origin's default branch (mirrors selfupdate.rs). */
+export interface CloneStatus {
+  dir: string;
+  branch: string;
+  defaultBranch: string;
+  behind: number;
+  /** Newest first, "<short sha> <subject>". */
+  commits: string[];
+  /** Why updating is refused: another branch, local commits or uncommitted changes. */
+  blocked: string | null;
+}
+
 /** A newer Skillshelf release found by the updater. */
 export interface AppUpdate {
   version: string;

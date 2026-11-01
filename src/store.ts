@@ -77,13 +77,19 @@ let lastTray = "";
 
 export const updatable = (items: Item[]) => items.filter((i) => i.status === "updateAvailable" && canUpdate(i));
 
+function appUpdateLabel(): string | null {
+  const { clone, update } = useAppUpdate.getState();
+  if (!clone) return update?.version ?? null;
+  return clone.behind && !clone.blocked ? `${clone.behind} new commit${clone.behind === 1 ? "" : "s"}` : null;
+}
+
 function traySummary(s: State): TraySummary {
   return {
     updates: updatable(s.items).map((i) => [i.id, i.name]),
     checking: s.busy === "checking",
     tokens: s.items.length ? sessionTokens(s.items) : null,
     unused: s.usage ? s.items.filter((i) => isUnused(i, s.usage)).length : null,
-    appUpdate: useAppUpdate.getState().update?.version ?? null,
+    appUpdate: appUpdateLabel(),
   };
 }
 /** Set when an action finished; the list is rescanned once the queue drains. */
@@ -132,7 +138,10 @@ export const useStore = create<State>((set, get) => {
       useStore.subscribe(syncTray);
       useAppUpdate.subscribe(syncTray);
       void api.onUsageProgress((usageProgress) => set({ usageProgress }));
-      void api.onScheduledCheck(() => void get().refresh({ check: true }));
+      void api.onScheduledCheck(() => {
+        void get().refresh({ check: true });
+        void useAppUpdate.getState().check({ quiet: true });
+      });
       void api.onTray((id) => {
         const s = get();
         if (id === "check") void s.refresh({ check: true });

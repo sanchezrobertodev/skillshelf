@@ -26,7 +26,7 @@ pub struct TrayState {
     /// Estimated tokens per session from everything that's on.
     pub tokens: Option<u32>,
     pub unused: Option<u32>,
-    /// A newer Skillshelf version.
+    /// A newer Skillshelf version, or how many commits a clone is behind.
     pub app_update: Option<String>,
 }
 
@@ -148,7 +148,7 @@ fn menu(app: &AppHandle, s: &TrayState) -> tauri::Result<Menu<Wry>> {
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     if let Some(v) = &s.app_update {
-        menu.append(&item("app-update", &format!("Skillshelf {v} is available…"), true)?)?;
+        menu.append(&item("app-update", &format!("Update Skillshelf ({v})…"), true)?)?;
     }
     menu.append(&item("show", "Show Skillshelf", true)?)?;
     menu.append(&item("quit", "Quit Skillshelf", true)?)?;
