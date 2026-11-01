@@ -178,7 +178,13 @@ pub async fn check(items: &[Item]) -> (Vec<(usize, Outcome)>, Vec<String>) {
             } else if let Some(sha) = dirs.get(folder.as_str()) {
                 Some(sha.to_string())
             } else if tree.truncated {
-                gh.folder_sha(&repo, &folder).await.ok().flatten()
+                match gh.folder_sha(&repo, &folder).await {
+                    Ok(sha) => sha,
+                    Err(e) => {
+                        results.push((idx, too_big_to_check(&e)));
+                        continue;
+                    }
+                }
             } else {
                 None
             };
@@ -186,6 +192,13 @@ pub async fn check(items: &[Item]) -> (Vec<(usize, Outcome)>, Vec<String>) {
         }
     }
     (results, warnings)
+}
+
+/// The repo's file list was truncated and the per-folder lookup failed too: we don't know, so never say "removed".
+fn too_big_to_check(err: &str) -> Outcome {
+    Outcome::unknown(format!(
+        "Repo too large for GitHub to list in one request, and the fallback lookup failed: {err}"
+    ))
 }
 
 pub fn compare_hash(local: Option<&str>, remote: Option<&str>) -> Outcome {
@@ -267,5 +280,12 @@ mod tests {
         assert_eq!(o.status, Status::UpdateAvailable);
         assert_eq!(o.latest.as_deref(), Some("#def7654"));
         assert_eq!(compare_hash(Some("a"), None).status, Status::Unknown);
+    }
+
+    #[test]
+    fn failed_fallback_is_not_reported_as_removed() {
+        let o = too_big_to_check("GitHub returned 500");
+        assert_eq!(o.status, Status::Unknown);
+        assert!(o.detail.unwrap().starts_with("Repo too large"));
     }
 }

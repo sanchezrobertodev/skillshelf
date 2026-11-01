@@ -2,7 +2,7 @@ import { Download, FolderPlus, LoaderCircle, Trash2, TriangleAlert, X } from "lu
 import { useEffect, useState } from "react";
 import { api, errorText } from "../api";
 import { changelogCounts, isEmpty, newestChange, useChangelog } from "../lib/changelog";
-import { sourceLabel, uninstallEffect } from "../lib/format";
+import { formatBytes, sourceLabel, uninstallEffect } from "../lib/format";
 import { useStore } from "../store";
 import type { Environment, Item, Job } from "../types";
 import { AppUpdateSettings } from "./AppUpdate";
@@ -95,6 +95,10 @@ function UninstallDialog({ items }: { items: Item[] }) {
   const run = useStore((s) => s.run);
   const close = () => confirm(null);
   const many = items.length > 1;
+  // Snapshot data from older builds has no dataBytes; treat undefined like null.
+  const withData = items.filter((i) => i.dataBytes != null);
+  const dataBytes = withData.reduce((n, i) => n + (i.dataBytes ?? 0), 0);
+  const [deleteData, setDeleteData] = useState(false);
   return (
     <Modal
       title={many ? `Uninstall ${items.length} items?` : `Uninstall ${items[0].name}?`}
@@ -108,7 +112,7 @@ function UninstallDialog({ items }: { items: Item[] }) {
             variant="danger"
             onClick={() => {
               close();
-              void run(items.map((i) => ({ itemId: i.id, action: "uninstall" as const })));
+              void run(items.map((i) => ({ itemId: i.id, action: "uninstall" as const, deleteData })));
             }}
           >
             <Trash2 aria-hidden className="size-4" />
@@ -130,6 +134,25 @@ function UninstallDialog({ items }: { items: Item[] }) {
           </li>
         ))}
       </ul>
+      {withData.length > 0 && (
+        <label className="mt-3 flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={deleteData}
+            onChange={(e) => setDeleteData(e.target.checked)}
+            className="mt-0.5 size-4 accent-[var(--accent)]"
+          />
+          <span>
+            <span className="block text-[13px] font-semibold">Also delete saved data ({formatBytes(dataBytes)})</span>
+            <span className="block text-xs text-muted">
+              {many
+                ? `${withData.length} of these plugins keep settings, caches or downloads in their data folders.`
+                : "This plugin keeps settings, caches or downloads in its data folder."}{" "}
+              Left unticked, the data stays and a reinstall picks up where it left off.
+            </span>
+          </span>
+        </label>
+      )}
       {items.some((i) => i.kind === "plugin") && (
         <p className="mt-3 text-xs text-muted">Restart Claude Code afterwards so it stops loading removed plugins.</p>
       )}

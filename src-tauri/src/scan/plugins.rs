@@ -123,6 +123,7 @@ fn to_item(p: CliPlugin, installed: &HashMap<String, Vec<InstalledEntry>>, known
     item.updated_at = p.last_updated.clone();
     item.notes = p.notes.clone();
     item.meta.insert("Plugin id".into(), p.id.clone());
+    item.data_bytes = paths::plugin_data_size(&p.id);
 
     let install_path = p.install_path.as_ref().map(PathBuf::from);
     if let Some(path) = &install_path {

@@ -77,6 +77,8 @@ pub struct Item {
     pub notes: Vec<String>,
     /// Extra label/value pairs for the detail panel.
     pub meta: BTreeMap<String, String>,
+    /// Plugins only: size of the plugin's data folder, `None` when it's missing or empty.
+    pub data_bytes: Option<u64>,
     #[serde(skip)]
     pub check: CheckInfo,
 }
@@ -130,6 +132,7 @@ impl Item {
             children: Vec::new(),
             notes: Vec::new(),
             meta: BTreeMap::new(),
+            data_bytes: None,
             check: CheckInfo::None,
         }
     }

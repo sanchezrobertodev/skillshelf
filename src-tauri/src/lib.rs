@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use actions::{ActionRequest, Finished, JobEvent, JobState};
-use model::{CheckResult, Item, ScanResult};
+use model::{CheckInfo, CheckResult, Item, ScanResult};
 use settings::Settings;
 
 struct AppState {
@@ -70,8 +70,7 @@ async fn run_actions(
 ) -> Result<Vec<JobInfo>, String> {
     let mut jobs = Vec::new();
     for req in requests {
-        let item = state.item(&req.item_id)?;
-        let plan = actions::plan(&item, &req);
+        let mut item = state.item(&req.item_id)?;
         let job_id = state.next_job.fetch_add(1, Ordering::Relaxed);
         let event = JobEvent {
             job_id,
@@ -93,6 +92,12 @@ async fn run_actions(
         tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
             let _guard = state.action_lock.lock().await;
+            // The data folder may have filled since the scan or while this job waited for the lock;
+            // decide --keep-data on what's there now.
+            if let CheckInfo::Plugin { plugin_id, .. } = &item.check {
+                item.data_bytes = paths::plugin_data_size(plugin_id);
+            }
+            let plan = actions::plan(&item, &req);
             let emit = |state: JobState, line: Option<String>, message: Option<String>, confirm| {
                 let _ = app.emit(
                     "job",
