@@ -141,6 +141,7 @@ export const useStore = create<State>((set, get) => {
           const item = s.items.find((i) => i.id === id.slice("review:".length));
           if (item) s.confirm({ type: "update", items: [item] });
         } else if (id === "overview" || id === "cleanup") s.setScreen(id);
+        else if (id === "app-update") useAppUpdate.getState().setNotesOpen(true);
       });
       try {
         set({ settings: await api.getSettings() });

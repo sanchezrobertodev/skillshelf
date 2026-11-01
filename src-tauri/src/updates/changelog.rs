@@ -269,7 +269,7 @@ pub async fn marketplace_changes(
             if old.is_none()
                 && let Some(repo) = &web_repo
             {
-                old = raw_file(repo, sha, &at).await;
+                old = raw_file(repo, sha, &at).await.ok().flatten();
             }
             after = old.as_deref().and_then(newest_version);
         }
@@ -320,16 +320,20 @@ async fn github_path_commits(repo: &str, base: &str, head: &str, rel: &str) -> R
 }
 
 /// A file at a commit, from raw.githubusercontent.com (not counted against the API rate limit).
-async fn raw_file(repo: &str, sha: &str, path: &str) -> Option<String> {
+/// `Ok(None)` when the file isn't there; `Err` when it couldn't be fetched.
+async fn raw_file(repo: &str, sha: &str, path: &str) -> Result<Option<String>, String> {
     let res = http()
         .get(format!("https://raw.githubusercontent.com/{repo}/{sha}/{path}"))
         .send()
         .await
-        .ok()?;
-    if !res.status().is_success() {
-        return None;
+        .map_err(|e| e.to_string())?;
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
     }
-    res.text().await.ok()
+    if !res.status().is_success() {
+        return Err(format!("GitHub answered {} for {path}", res.status()));
+    }
+    res.text().await.map(Some).map_err(|e| e.to_string())
 }
 
 /// Commits under `rel` from `sha` (exclusive) to HEAD, newest first.
@@ -479,12 +483,13 @@ async fn external_changes(src: &Map<String, Value>, git_sha: Option<&str>) -> Re
         .unwrap_or(entries.len());
     let subdir = src.get("path").and_then(Value::as_str).filter(|p| !p.is_empty());
     let prefix = subdir.map(|p| format!("{}/", p.trim_matches('/'))).unwrap_or_default();
-    let risks = match compare_files(&v, &prefix) {
-        Some(changed) => Some(risk::assess(
-            &changed,
-            &github_contents(&repo, base, &head, &prefix, &changed).await,
-        )),
-        None => None,
+    // A file that couldn't be fetched leaves the risks unknown, and the result is retried.
+    let (risks, retryable) = match compare_files(&v, &prefix) {
+        Some(changed) => match github_contents(&repo, base, &head, &prefix, &changed).await {
+            Ok(contents) => (Some(risk::assess(&changed, &contents)), false),
+            Err(_) => (None, true),
+        },
+        None => (None, false),
     };
     Ok(Changelog {
         label: format!("Commits in {repo} since the installed commit"),
@@ -493,6 +498,7 @@ async fn external_changes(src: &Map<String, Value>, git_sha: Option<&str>) -> Re
         more_url: v.get("html_url").and_then(Value::as_str).map(str::to_string),
         note: subdir.map(|p| format!("Includes commits outside the plugin's folder (`{p}`).")),
         risks,
+        retryable,
         ..Default::default()
     })
 }
@@ -514,17 +520,23 @@ pub fn compare_files(compare: &Value, prefix: &str) -> Option<Vec<String>> {
 }
 
 /// Before and after text of the changed files whose risk depends on what's inside them.
-async fn github_contents(repo: &str, base: &str, head: &str, prefix: &str, changed: &[String]) -> Contents {
+async fn github_contents(
+    repo: &str,
+    base: &str,
+    head: &str,
+    prefix: &str,
+    changed: &[String],
+) -> Result<Contents, String> {
     let mut out = Contents::new();
     for rel in changed {
         let name = rel.rsplit('/').next().unwrap_or(rel).to_ascii_lowercase();
         if name == "plugin.json" || name == "skill.md" {
             let full = format!("{prefix}{rel}");
-            let pair = (raw_file(repo, base, &full).await, raw_file(repo, head, &full).await);
+            let pair = (raw_file(repo, base, &full).await?, raw_file(repo, head, &full).await?);
             out.insert(rel.clone(), pair);
         }
     }
-    out
+    Ok(out)
 }
 
 /// `owner/repo` for GitHub https, ssh and scp-style URLs.
@@ -651,7 +663,10 @@ async fn skills_cli(repo: Option<&str>, skill_path: &str, folder_hash: Option<&s
                 log.note = Some("No commits to this skill's folder since your version.".into());
                 log.risks = Some(Vec::new());
             } else {
-                log.risks = skill_risks(&gh, repo, &folder, &commits[i].sha, &commits[0].sha).await;
+                match skill_risks(&gh, repo, &folder, &commits[i].sha, &commits[0].sha).await {
+                    Ok(risks) => log.risks = risks,
+                    Err(_) => log.retryable = true,
+                }
             }
         }
         other => {
@@ -670,21 +685,29 @@ async fn skills_cli(repo: Option<&str>, skill_path: &str, folder_hash: Option<&s
     Ok(log)
 }
 
-async fn skill_risks(gh: &Github, repo: &str, folder: &str, base: &str, head: &str) -> Option<Vec<Risk>> {
+/// `Ok(None)` when GitHub cut the file list short; `Err` when a request failed.
+async fn skill_risks(
+    gh: &Github,
+    repo: &str,
+    folder: &str,
+    base: &str,
+    head: &str,
+) -> Result<Option<Vec<Risk>>, String> {
     let v = gh
         .get(&format!("https://api.github.com/repos/{repo}/compare/{base}...{head}"))
-        .await
-        .ok()?;
+        .await?;
     let prefix = if folder.is_empty() {
         String::new()
     } else {
         format!("{folder}/")
     };
-    let changed = compare_files(&v, &prefix)?;
-    Some(risk::assess(
+    let Some(changed) = compare_files(&v, &prefix) else {
+        return Ok(None);
+    };
+    Ok(Some(risk::assess(
         &changed,
-        &github_contents(repo, base, head, &prefix, &changed).await,
-    ))
+        &github_contents(repo, base, head, &prefix, &changed).await?,
+    )))
 }
 
 // ---------- skill-release.json ----------
