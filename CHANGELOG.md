@@ -6,6 +6,8 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+
 ### Added
 
 - **Settings** is now a screen of its own, with General, Appearance, Updates, Project folders and About sections. Changes apply right away.
@@ -77,6 +79,7 @@ First release of Skillshelf, a desktop app for the skills and plugins you've ins
 - Filter, sort and search by type, status, source, marketplace/repo and on/off state.
 - Enable/disable plugins, uninstall items (always with a confirmation), and open an item's folder or source repo.
 
-[Unreleased]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sanchezrobertodev/skillshelf/releases/tag/v0.1.0

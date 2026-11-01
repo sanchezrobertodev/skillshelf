@@ -1,6 +1,6 @@
 [package]
 name = "skillshelf"
-version = "0.2.0"
+version = "0.3.0"
 description = "Browse, filter and update your installed Claude Code skills and plugins"
 authors = ["Roberto Sanchez"]
 license = "MIT"
