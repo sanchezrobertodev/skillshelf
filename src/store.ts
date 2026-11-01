@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import { api, errorText } from "./api";
 import { useAppUpdate } from "./appUpdate";
+import { applyLanguage, group, t, type LanguagePref } from "./i18n";
 import { canUpdate } from "./lib/format";
 import { isUnused, sessionTokens } from "./lib/insights";
-import { applyTheme, emptyFilters, loadPrefs, savePrefs, type Filters, type Prefs, type SortKey, type Theme } from "./lib/prefs";
+import { applyTheme, emptyFilters, loadPrefs, savePrefs, type Filters, type Palette, type Prefs, type SortKey, type Theme } from "./lib/prefs";
 import type { ActionRequest, Item, Job, JobEvent, McpReport, Settings, TraySummary, Usage, UsageProgress } from "./types";
 
 export type Busy = "idle" | "scanning" | "checking";
-export type Screen = "overview" | "library" | "cleanup" | "mcp";
+export type Screen = "overview" | "library" | "cleanup" | "mcp" | "settings";
 
 export type Confirmation =
   | { type: "update"; items: Item[] }
@@ -38,7 +39,6 @@ interface State extends Prefs {
   restartNeeded: boolean;
   confirmation: Confirmation | null;
   settings: Settings;
-  settingsOpen: boolean;
   screen: Screen;
 
   init: () => Promise<void>;
@@ -58,6 +58,8 @@ interface State extends Prefs {
   clearFilters: () => void;
   setSort: (key: SortKey) => void;
   setTheme: (t: Theme) => void;
+  setPalette: (p: Palette) => void;
+  setLanguage: (l: LanguagePref) => void;
   setActive: (id: string | null, open?: boolean) => void;
   closeDetail: () => void;
   toggleSelected: (id: string) => void;
@@ -67,7 +69,6 @@ interface State extends Prefs {
   confirm: (c: Confirmation | null) => void;
   dismissRestart: () => void;
   dismissWarnings: () => void;
-  setSettingsOpen: (open: boolean) => void;
   setScreen: (screen: Screen) => void;
   saveSettings: (s: Settings) => Promise<void>;
 }
@@ -80,7 +81,7 @@ export const updatable = (items: Item[]) => items.filter((i) => i.status === "up
 function appUpdateLabel(): string | null {
   const { clone, update } = useAppUpdate.getState();
   if (!clone) return update?.version ?? null;
-  return clone.behind && !clone.blocked ? `${clone.behind} new commit${clone.behind === 1 ? "" : "s"}` : null;
+  return clone.behind && !clone.blocked ? t("app.commitsBehind", { count: clone.behind }) : null;
 }
 
 function traySummary(s: State): TraySummary {
@@ -90,6 +91,7 @@ function traySummary(s: State): TraySummary {
     tokens: s.items.length ? sessionTokens(s.items) : null,
     unused: s.usage ? s.items.filter((i) => isUnused(i, s.usage)).length : null,
     appUpdate: appUpdateLabel(),
+    text: group("tray."),
   };
 }
 /** Set when an action finished; the list is rescanned once the queue drains. */
@@ -97,8 +99,8 @@ let refreshAfterQueue = false;
 
 export const useStore = create<State>((set, get) => {
   const persist = () => {
-    const { theme, sort, filters } = get();
-    savePrefs({ theme, sort, filters });
+    const { theme, palette, language, sort, filters } = get();
+    savePrefs({ theme, palette, language, sort, filters });
   };
 
   return {
@@ -123,8 +125,7 @@ export const useStore = create<State>((set, get) => {
     mcpError: null,
     restartNeeded: false,
     confirmation: null,
-    settings: { projects: [], autoCheck: true },
-    settingsOpen: false,
+    settings: { projects: [], autoCheck: true, checkInterval: "daily", closeToTray: true, notifications: true },
     screen: "library",
 
     init: async () => {
@@ -210,7 +211,7 @@ export const useStore = create<State>((set, get) => {
         const r = await api.usage();
         set({ usage: r.byItem });
       } catch (e) {
-        set((s) => ({ warnings: [...s.warnings, `Couldn't count uses from your transcripts: ${errorText(e)}`] }));
+        set((s) => ({ warnings: [...s.warnings, t("app.usageFailed", { error: errorText(e) })] }));
       } finally {
         set({ usageProgress: null });
       }
@@ -305,8 +306,18 @@ export const useStore = create<State>((set, get) => {
       persist();
     },
     setTheme: (theme) => {
-      applyTheme(theme);
+      applyTheme(theme, get().palette);
       set({ theme });
+      persist();
+    },
+    setPalette: (palette) => {
+      applyTheme(get().theme, palette);
+      set({ palette });
+      persist();
+    },
+    setLanguage: (language) => {
+      applyLanguage(language);
+      set({ language });
       persist();
     },
     setActive: (activeId, open = true) => set((s) => ({ activeId, detailOpen: open || s.detailOpen })),
@@ -327,7 +338,6 @@ export const useStore = create<State>((set, get) => {
     confirm: (confirmation) => set({ confirmation }),
     dismissRestart: () => set({ restartNeeded: false }),
     dismissWarnings: () => set({ warnings: [] }),
-    setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
     setScreen: (screen) => set({ screen }),
     saveSettings: async (settings) => {
       const projectsChanged = settings.projects.join("\n") !== get().settings.projects.join("\n");

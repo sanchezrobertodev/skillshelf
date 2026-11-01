@@ -6,6 +6,22 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+### Added
+
+- **Settings** is now a screen of its own, with General, Appearance, Updates, Project folders and About sections. Changes apply right away.
+- Spanish. Skillshelf follows your system language, or you can pick one in **Settings → General**. The tray menu and notifications use it too.
+- Colour themes: Workbench (the current teal), Graphite, Indigo, Rose and High contrast, each in light and dark. Every theme's text meets WCAG contrast (7:1 for High contrast).
+- Choose how often Skillshelf checks for updates: every day, every week, or only when you click **Check now**.
+- Turn update notifications off.
+- Start Skillshelf at login, hidden in the tray.
+- Choose whether closing the window keeps Skillshelf in the tray or quits it.
+- Links to the source code, issue tracker, changelog and license in **Settings → About**.
+- CONTRIBUTING.md (including how to add a language or a theme), a security policy, a code of conduct, and issue and pull request templates.
+
+### Changed
+
+- Skill health messages and update risk flags are shown in your language.
+
 ## [0.2.0] - 2026-10-31
 
 ### Added

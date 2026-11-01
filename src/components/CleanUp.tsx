@@ -2,14 +2,15 @@ import clsx from "clsx";
 import { Building2, FolderSymlink, Hammer, Lock, LoaderCircle, PowerOff, RotateCcw, Trash2, CircleMinus, BrushCleaning } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { api, errorText } from "../api";
-import { relativeTime } from "../lib/format";
+import { t, tx, useT } from "../i18n";
+import { relativeTime, statusLabel } from "../lib/format";
 import { hasHooks, isUnused, shortCount } from "../lib/insights";
 import { useStore } from "../store";
 import type { Item } from "../types";
 import { Button, card, KindIcon, Switch } from "./ui";
 
 const byCost = (a: Item, b: Item) => (b.cost?.total ?? 0) - (a.cost?.total ?? 0);
-const tokens = (i: Item) => (i.cost?.total ? `≈${shortCount(i.cost.total)} tokens` : null);
+const tokens = (i: Item) => (i.cost?.total ? t("cleanup.tokens", { tokens: shortCount(i.cost.total) }) : null);
 
 function Section({
   title,
@@ -68,6 +69,7 @@ function Row({ item, detail, lead, children }: { item: Item; detail: ReactNode; 
 }
 
 function UnusedPlugins({ items }: { items: Item[] }) {
+  const t = useT();
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
   const usage = useStore((s) => s.usage);
@@ -86,13 +88,13 @@ function UnusedPlugins({ items }: { items: Item[] }) {
 
   return (
     <Section
-      title="Unused plugins"
+      title={t("cleanup.unused")}
       icon={BrushCleaning}
       count={unused?.length}
       description={
         unused?.length
-          ? `On, but not used in the last 30 days. Turning them all off frees ≈${shortCount(total)} tokens per session.`
-          : "Enabled plugins with no uses in your transcripts in the last 30 days."
+          ? t("cleanup.unusedHelp", { tokens: shortCount(total) })
+          : t("cleanup.unusedNone")
       }
       actions={
         unused?.length ? (
@@ -106,11 +108,11 @@ function UnusedPlugins({ items }: { items: Item[] }) {
               }}
             >
               <PowerOff aria-hidden className="size-3.5" />
-              Turn off{chosen.length ? ` ${chosen.length}` : ""}
+              {chosen.length ? t("cleanup.turnOffCount", { count: chosen.length }) : t("cleanup.turnOff")}
             </Button>
             <Button size="sm" variant="danger" disabled={!chosen.length} onClick={() => confirm({ type: "uninstall", items: chosen })}>
               <Trash2 aria-hidden className="size-3.5" />
-              Uninstall{chosen.length ? ` ${chosen.length}` : ""}…
+              {chosen.length ? t("cleanup.uninstallCount", { count: chosen.length }) : t("cleanup.uninstall")}
             </Button>
           </>
         ) : undefined
@@ -119,10 +121,10 @@ function UnusedPlugins({ items }: { items: Item[] }) {
       {!unused ? (
         <p className="flex items-center gap-1.5 px-4 py-4 text-[13px] text-muted">
           <LoaderCircle aria-hidden className="size-4 animate-spin" />
-          {progress?.total ? `Counting uses: ${progress.read} of ${progress.total} transcripts…` : "Counting uses from your transcripts…"}
+          {progress?.total ? t("cleanup.countingProgress", { read: progress.read, total: progress.total }) : t("cleanup.counting")}
         </p>
       ) : unused.length === 0 ? (
-        <Empty>Every enabled plugin was used in the last 30 days.</Empty>
+        <Empty>{t("cleanup.allUsed")}</Empty>
       ) : (
         <>
           <label className="flex h-9 items-center gap-3 border-b border-border px-4 text-xs text-muted">
@@ -132,20 +134,20 @@ function UnusedPlugins({ items }: { items: Item[] }) {
               onChange={() => setPicked(all ? new Set() : new Set(unused.map((i) => i.id)))}
               className="size-4 cursor-pointer accent-[var(--accent)]"
             />
-            Select all
+            {t("cleanup.selectAll")}
           </label>
           <ul className="divide-y divide-border">
             {unused.map((i) => (
               <Row
                 key={i.id}
                 item={i}
-                detail={[tokens(i), usage?.[i.id]?.lastUsed ? `last used ${relativeTime(usage[i.id].lastUsed)}` : "no uses found"]
+                detail={[tokens(i), usage?.[i.id]?.lastUsed ? t("cleanup.lastUsed", { time: relativeTime(usage[i.id].lastUsed) }) : t("cleanup.noUses")]
                   .filter(Boolean)
                   .join(" · ")}
                 lead={
                   <input
                     type="checkbox"
-                    aria-label={`Select ${i.name}`}
+                    aria-label={t("cleanup.select", { name: i.name })}
                     checked={picked.has(i.id)}
                     onChange={() => toggle(i.id)}
                     className="size-4 shrink-0 cursor-pointer accent-[var(--accent)]"
@@ -161,6 +163,7 @@ function UnusedPlugins({ items }: { items: Item[] }) {
 }
 
 export function CleanUp() {
+  const t = useT();
   const items = useStore((s) => s.items);
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
@@ -184,24 +187,24 @@ export function CleanUp() {
       <UnusedPlugins items={items} />
 
       <Section
-        title="Plugins with hooks"
+        title={t("cleanup.hooks")}
         icon={Hammer}
         count={hooks.length}
-        description="Hooks run on events like session start or each tool call, so they never show up as uses. Decide on these yourself."
+        description={t("cleanup.hooksHelp")}
       >
         {hooks.length === 0 ? (
-          <Empty>No plugins with hooks.</Empty>
+          <Empty>{t("cleanup.noHooks")}</Empty>
         ) : (
           <ul className="divide-y divide-border">
             {hooks.map((i) => (
               <Row
                 key={i.id}
                 item={i}
-                detail={[tokens(i), `${i.children.filter((c) => c.kind === "hook").length} hook events`, i.isMod && "mod"].filter(Boolean).join(" · ")}
+                detail={[tokens(i), t("cleanup.hookEvents", { count: i.children.filter((c) => c.kind === "hook").length }), i.isMod && t("cleanup.mod")].filter(Boolean).join(" · ")}
               >
                 {i.enabled !== null && (
                   <Switch
-                    label={`${i.name} enabled`}
+                    label={t("cleanup.enabled", { name: i.name })}
                     checked={i.enabled}
                     disabled={busy.has(i.id)}
                     onChange={() => void run([{ itemId: i.id, action: i.enabled ? "disable" : "enable" }])}
@@ -214,32 +217,32 @@ export function CleanUp() {
       </Section>
 
       <Section
-        title="Skills moved upstream"
+        title={t("cleanup.moved")}
         icon={FolderSymlink}
         count={moved.length}
-        description="Their repo or folder changed, so they can't update in place. Reinstall gets them from the new location."
+        description={t("cleanup.movedHelp")}
         actions={
           moved.length > 1 ? (
             <Button size="sm" onClick={() => void run(moved.filter((i) => !busy.has(i.id)).map((i) => ({ itemId: i.id, action: "reinstall" as const })))}>
               <RotateCcw aria-hidden className="size-3.5" />
-              Reinstall all
+              {t("cleanup.reinstallAll")}
             </Button>
           ) : undefined
         }
       >
         {moved.length === 0 ? (
-          <Empty>No skills moved upstream.</Empty>
+          <Empty>{t("cleanup.noMoved")}</Empty>
         ) : (
           <ul className="divide-y divide-border">
             {moved.map((i) => (
               <Row
                 key={i.id}
                 item={i}
-                detail={i.upstream ? `Now at ${i.upstream.folder ? `${i.upstream.repo}/${i.upstream.folder}` : i.upstream.repo}` : i.statusDetail}
+                detail={i.upstream ? t("cleanup.nowAt", { location: i.upstream.folder ? `${i.upstream.repo}/${i.upstream.folder}` : i.upstream.repo }) : i.statusDetail}
               >
                 <Button size="sm" disabled={busy.has(i.id)} onClick={() => void run([{ itemId: i.id, action: "reinstall" }])}>
                   <RotateCcw aria-hidden className="size-3.5" />
-                  Reinstall
+                  {t("cleanup.reinstall")}
                 </Button>
               </Row>
             ))}
@@ -248,21 +251,21 @@ export function CleanUp() {
       </Section>
 
       <Section
-        title="Skills removed upstream"
+        title={t("cleanup.removed")}
         icon={CircleMinus}
         count={removed.length}
-        description="Deleted from their repo. Your copy still works but won't get updates."
+        description={t("cleanup.removedHelp")}
         actions={
           removed.length > 1 ? (
             <Button size="sm" variant="danger" onClick={() => confirm({ type: "uninstall", items: removed })}>
               <Trash2 aria-hidden className="size-3.5" />
-              Uninstall all…
+              {t("cleanup.uninstallAll")}
             </Button>
           ) : undefined
         }
       >
         {removed.length === 0 ? (
-          <Empty>No skills removed upstream.</Empty>
+          <Empty>{t("cleanup.noRemoved")}</Empty>
         ) : (
           <ul className="divide-y divide-border">
             {removed.map((i) => {
@@ -274,29 +277,30 @@ export function CleanUp() {
                   detail={
                     c ? (
                       <>
-                        Removed in{" "}
-                        {c.url ? (
-                          <button
-                            type="button"
-                            onClick={() => api.openChangelogLink(i.id, c.url!).catch((e) => setError(errorText(e)))}
-                            className="rounded font-mono text-info hover:underline"
-                          >
-                            {c.sha.slice(0, 7)}
-                          </button>
-                        ) : (
-                          <span className="font-mono">{c.sha.slice(0, 7)}</span>
-                        )}
+                        {tx("cleanup.removedIn", {
+                          commit: c.url ? (
+                            <button
+                              type="button"
+                              onClick={() => api.openChangelogLink(i.id, c.url!).catch((e) => setError(errorText(e)))}
+                              className="rounded font-mono text-info hover:underline"
+                            >
+                              {c.sha.slice(0, 7)}
+                            </button>
+                          ) : (
+                            <span className="font-mono">{c.sha.slice(0, 7)}</span>
+                          ),
+                        })}
                         {c.date && ` ${relativeTime(c.date)}`}
                         {c.message && ` · ${c.message}`}
                       </>
                     ) : (
-                      (i.statusDetail ?? "Removed upstream")
+                      (i.statusDetail ?? statusLabel.removed)
                     )
                   }
                 >
                   <Button size="sm" variant="danger" disabled={busy.has(i.id)} onClick={() => confirm({ type: "uninstall", items: [i] })}>
                     <Trash2 aria-hidden className="size-3.5" />
-                    Uninstall…
+                    {t("cleanup.uninstall")}
                   </Button>
                 </Row>
               );
@@ -306,18 +310,18 @@ export function CleanUp() {
       </Section>
 
       <Section
-        title="Managed by your organization"
+        title={t("cleanup.managed")}
         icon={Building2}
         count={managed.length}
-        description="Your claude.ai organization installs and updates these plugins, so Skillshelf leaves them alone."
+        description={t("cleanup.managedHelp")}
       >
         {managed.length === 0 ? (
-          <Empty>No plugins are managed by an organization.</Empty>
+          <Empty>{t("cleanup.noManaged")}</Empty>
         ) : (
           <ul className="divide-y divide-border">
             {managed.map((i) => (
-              <Row key={i.id} item={i} detail={[tokens(i), i.enabled === false ? "off" : "on"].filter(Boolean).join(" · ")}>
-                <Lock role="img" aria-label="Locked" className="size-4 shrink-0 text-muted" />
+              <Row key={i.id} item={i} detail={[tokens(i), i.enabled === false ? t("cleanup.off") : t("cleanup.on")].filter(Boolean).join(" · ")}>
+                <Lock role="img" aria-label={t("cleanup.locked")} className="size-4 shrink-0 text-muted" />
               </Row>
             ))}
           </ul>

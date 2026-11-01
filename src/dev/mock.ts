@@ -28,7 +28,8 @@ const listeners = new Set<(e: JobEvent) => void>();
 const usageListeners = new Set<(p: UsageProgress) => void>();
 const lastRuns: Record<string, LastRun> = {};
 let items: Item[] = [];
-let settings: Settings = { projects: [], autoCheck: true };
+let settings: Settings = { projects: [], autoCheck: true, checkInterval: "daily", closeToTray: true, notifications: true };
+let autostart = false;
 let job = 1;
 /** Set by Stop; jobs that haven't finished yet end as cancelled. */
 let stopped = false;
@@ -252,6 +253,9 @@ export const mockApi = {
     await wait(500);
     return mockChangelog(items.find((i) => i.id === itemId)!);
   },
+  openProjectPage: async (page: string) => {
+    console.info("open project page", page);
+  },
   openChangelogLink: async (_itemId: string, url: string) => {
     window.open(url, "_blank", "noopener");
   },
@@ -339,7 +343,7 @@ export const mockApi = {
   },
   // No tray in the browser; the title shows what the window title would.
   updateTray: async (s: TraySummary) => {
-    document.title = s.tokens ? `Skillshelf — ≈${Math.round(s.tokens / 1000)}k tokens per session` : "Skillshelf";
+    document.title = s.tokens ? s.text["tray.title"].replace("{tokens}", `${Math.round(s.tokens / 1000)}k`) : "Skillshelf";
   },
   onTray: async () => () => {},
   onScheduledCheck: async () => () => {},
@@ -355,7 +359,12 @@ export const mockApi = {
     gh: null,
     os: "browser",
     version: "dev",
+    tray: true,
+    autostart,
   }),
+  setAutostart: async (on: boolean) => {
+    autostart = on;
+  },
   pickFolder: async () => null,
   onJob: async (cb: (e: JobEvent) => void) => {
     const listener = (e: JobEvent) => cb(e);

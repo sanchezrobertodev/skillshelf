@@ -1,12 +1,20 @@
 import { Download, LoaderCircle, RefreshCw, Search, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { type TKey, useT } from "../i18n";
 import { relativeTime } from "../lib/format";
 import { type Screen, useStore } from "../store";
 import { Button, IconButton, Kbd } from "./ui";
 
-const titles: Record<Screen, string> = { overview: "Overview", library: "Library", cleanup: "Clean Up", mcp: "MCP Servers" };
+const titles: Record<Screen, TKey> = {
+  overview: "rail.overview",
+  library: "rail.library",
+  cleanup: "rail.cleanup",
+  mcp: "toolbar.mcpServers",
+  settings: "rail.settings",
+};
 
 export function Toolbar() {
+  const t = useT();
   const screen = useStore((s) => s.screen);
   const query = useStore((s) => s.query);
   const setQuery = useStore((s) => s.setQuery);
@@ -38,17 +46,17 @@ export function Toolbar() {
 
   const status =
     busy === "scanning"
-      ? "Scanning installed items…"
+      ? t("toolbar.scanning")
       : busy === "checking"
-        ? "Checking for updates…"
+        ? t("toolbar.checking")
         : checkedAt
-          ? `Checked ${relativeTime(checkedAt)}`
-          : "Not checked yet";
+          ? t("toolbar.checked", { time: relativeTime(checkedAt) })
+          : t("toolbar.notChecked");
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 px-5">
-      <h1 className="text-lg font-semibold tracking-tight">{titles[screen]}</h1>
-      <span className="hidden text-xs text-muted lg:inline" aria-live="polite">
+      <h1 className="shrink-0 text-lg font-semibold tracking-tight">{t(titles[screen])}</h1>
+      <span className="hidden shrink-0 text-xs whitespace-nowrap text-muted lg:inline" aria-live="polite">
         {status}
       </span>
 
@@ -62,13 +70,13 @@ export function Toolbar() {
           onKeyDown={(e) => {
             if (e.key === "Escape") setQuery("");
           }}
-          placeholder="Search skills, plugins, commands…"
-          aria-label="Search"
+          placeholder={t("toolbar.searchPlaceholder")}
+          aria-label={t("toolbar.search")}
           className="h-9 w-full rounded-lg border border-border bg-surface pr-16 pl-9 text-sm shadow-card placeholder:text-muted focus-visible:outline-2"
         />
         <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
           {query ? (
-            <IconButton label="Clear search" className="size-7" onClick={() => setQuery("")}>
+            <IconButton label={t("toolbar.clearSearch")} className="size-7" onClick={() => setQuery("")}>
               <X className="size-3.5" />
             </IconButton>
           ) : (
@@ -77,17 +85,17 @@ export function Toolbar() {
         </div>
       </div>
 
-      <Button onClick={() => void checkUpdates()} disabled={busy !== "idle"} title="Refresh catalogs and compare versions">
+      <Button onClick={() => void checkUpdates()} disabled={busy !== "idle"} title={t("toolbar.checkTitle")}>
         {busy === "checking" ? (
           <LoaderCircle aria-hidden className="size-4 animate-spin" />
         ) : (
           <RefreshCw aria-hidden className="size-4" />
         )}
-        Check now
+        {t("toolbar.check")}
       </Button>
       <Button variant="update" disabled={!updatable.length} onClick={() => confirm({ type: "update", items: updatable })}>
         <Download aria-hidden className="size-4" />
-        {updatable.length ? `Review ${updatable.length} update${updatable.length === 1 ? "" : "s"}` : "No updates"}
+        {updatable.length ? t("toolbar.review", { count: updatable.length }) : t("toolbar.noUpdates")}
       </Button>
     </header>
   );

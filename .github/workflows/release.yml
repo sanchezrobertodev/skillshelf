@@ -26,6 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: node scripts/contrast.mjs
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
   bundle:

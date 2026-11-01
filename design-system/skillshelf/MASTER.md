@@ -20,6 +20,20 @@
 - **Status is never colour alone.** Every chip has an icon and text. Every chart has a text alternative (`role="img"` plus `aria-label`).
 - **Components use semantic tokens only** (`bg-surface`, `text-muted`, `bg-warn`…), never raw hex.
 
+## Themes
+
+Five palettes, each with a light and a dark block in `src/index.css` that defines every token below. The table shows Workbench, the default.
+
+| Palette | Accent | Notes |
+|---|---|---|
+| Workbench | teal | Default |
+| Graphite | near-black / near-white | Monochrome, so orange updates are the only colour |
+| Indigo | indigo | Cool slate surfaces |
+| Rose | rose | Updates use amber so they stay distinct from the accent |
+| High contrast | dark blue / sky | 7:1 text, hard borders instead of shadows, inverted active rail item |
+
+`node scripts/contrast.mjs` (part of `make check` and CI) checks every text pair of every theme, including chips on their own 12% tints.
+
 ## Tokens (`src/index.css`)
 
 | Token | Light | Dark | Use |

@@ -12,7 +12,8 @@ import {
   Server,
 } from "lucide-react";
 import { useId, type ReactNode } from "react";
-import { relativeTime } from "../lib/format";
+import { useT } from "../i18n";
+import { issueText, relativeTime } from "../lib/format";
 import { isUnused, loadsEverywhere, sessionTokens, shortCount } from "../lib/insights";
 import { updatable, useStore } from "../store";
 import { Button, card } from "./ui";
@@ -44,6 +45,7 @@ function Big({ value, label, tone }: { value: ReactNode; label: string; tone?: s
 }
 
 export function Overview() {
+  const t = useT();
   const items = useStore((s) => s.items);
   const usage = useStore((s) => s.usage);
   const progress = useStore((s) => s.usageProgress);
@@ -64,10 +66,10 @@ export function Overview() {
         {busy === "scanning" ? (
           <>
             <LoaderCircle aria-hidden className="size-4 animate-spin" />
-            Scanning installed items…
+            {t("overview.scanning")}
           </>
         ) : (
-          "No skills or plugins found in ~/.claude."
+          t("overview.noItems")
         )}
       </div>
     );
@@ -96,47 +98,47 @@ export function Overview() {
   return (
     <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 overflow-y-auto px-5 pb-4">
       <Tile
-        title="Updates"
+        title={t("overview.updates")}
         icon={CircleArrowUp}
         actions={
           pending.length ? (
             <>
               <Button variant="update" size="sm" onClick={() => confirm({ type: "update", items: pending })}>
                 <Download aria-hidden className="size-3.5" />
-                Review {pending.length}
+                {t("overview.review", { count: pending.length })}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => browse({ statuses: ["updateAvailable"] })}>
-                Show in Library
+                {t("overview.showInLibrary")}
               </Button>
             </>
           ) : (
             <Button size="sm" disabled={busy !== "idle"} onClick={() => void checkUpdates()}>
               <RefreshCw aria-hidden className={clsx("size-3.5", busy === "checking" && "animate-spin")} />
-              Check now
+              {t("overview.checkNow")}
             </Button>
           )
         }
       >
         <Big
-          value={pending.length || "None"}
+          value={pending.length || t("overview.none")}
           tone={pending.length ? "text-warn" : undefined}
-          label={pending.length ? (pending.length === 1 ? "update pending" : "updates pending") : "Everything is up to date"}
+          label={pending.length ? t("overview.pending", { count: pending.length }) : t("overview.upToDate")}
         />
-        <p className="mt-1 text-xs text-muted">{checkedAt ? `Checked ${relativeTime(checkedAt)}` : "Not checked yet"}</p>
+        <p className="mt-1 text-xs text-muted">{checkedAt ? t("overview.checked", { time: relativeTime(checkedAt) }) : t("overview.notChecked")}</p>
       </Tile>
 
       <Tile
-        title="Context per session"
+        title={t("overview.context")}
         icon={Gauge}
         actions={
           <Button variant="ghost" size="sm" onClick={byCost}>
-            Sort Library by cost
+            {t("overview.sortByCost")}
           </Button>
         }
       >
-        <Big value={`≈${shortCount(tokens)}`} label="tokens added to every session (estimate)" />
+        <Big value={`≈${shortCount(tokens)}`} label={t("overview.tokensLabel")} />
         {heavy.length > 0 && (
-          <ol aria-label="Heaviest items" className="mt-3 space-y-1.5">
+          <ol aria-label={t("overview.heaviest")} className="mt-3 space-y-1.5">
             {heavy.map((i) => (
               <li key={i.id} className="grid grid-cols-[minmax(0,1fr)_72px_40px] items-center gap-2 text-xs">
                 <button type="button" onClick={() => reveal(i.id)} className="truncate rounded text-left hover:underline">
@@ -153,41 +155,41 @@ export function Overview() {
       </Tile>
 
       <Tile
-        title="Unused plugins"
+        title={t("cleanup.unused")}
         icon={BrushCleaning}
         actions={
           unused && (
             <Button size="sm" onClick={() => setScreen("cleanup")}>
-              Open Clean Up
+              {t("overview.openCleanUp")}
             </Button>
           )
         }
       >
         {unused ? (
           <>
-            <Big value={unused.length} label={unused.length === 1 ? "enabled plugin with no uses in 30 days" : "enabled plugins with no uses in 30 days"} />
-            {unusedTokens > 0 && <p className="mt-1 text-xs text-muted">Turning them off frees ≈{shortCount(unusedTokens)} tokens per session.</p>}
+            <Big value={unused.length} label={t("overview.unused", { count: unused.length })} />
+            {unusedTokens > 0 && <p className="mt-1 text-xs text-muted">{t("overview.unusedFrees", { tokens: shortCount(unusedTokens) })}</p>}
           </>
         ) : (
           <p className="flex items-center gap-1.5 text-[13px] text-muted">
             <LoaderCircle aria-hidden className="size-4 animate-spin" />
-            {progress?.total ? `Counting uses: ${progress.read} of ${progress.total} transcripts…` : "Counting uses from your transcripts…"}
+            {progress?.total ? t("cleanup.countingProgress", { read: progress.read, total: progress.total }) : t("cleanup.counting")}
           </p>
         )}
       </Tile>
 
       <Tile
-        title="MCP servers"
+        title={t("overview.mcp")}
         icon={Server}
         actions={
           mcp ? (
             <Button size="sm" onClick={() => setScreen("mcp")}>
-              Open MCP Servers
+              {t("overview.openMcp")}
             </Button>
           ) : (
             <Button size="sm" disabled={mcpBusy} onClick={() => void loadMcp()}>
               {mcpBusy ? <LoaderCircle aria-hidden className="size-3.5 animate-spin" /> : <RefreshCw aria-hidden className="size-3.5" />}
-              {mcpBusy ? "Checking…" : "Check servers"}
+              {mcpBusy ? t("mcp.checking") : t("mcp.check")}
             </Button>
           )
         }
@@ -199,10 +201,8 @@ export function Overview() {
               tone={problems.length ? "text-danger" : undefined}
               label={
                 problems.length
-                  ? `of ${mcp.servers.length} servers need attention`
-                  : mcp.servers.length === 1
-                    ? "server, connected"
-                    : "servers, all connected"
+                  ? t("overview.mcpAttention", { count: problems.length, total: mcp.servers.length })
+                  : t("overview.mcpConnected", { count: mcp.servers.length })
               }
             />
             {problems.length > 0 && (
@@ -210,7 +210,7 @@ export function Overview() {
                 {problems.slice(0, 3).map((s) => (
                   <li key={`${s.plugin}:${s.name}`} className="flex gap-2">
                     <span className="min-w-0 flex-1 truncate font-mono">{s.name}</span>
-                    <span className="shrink-0 text-muted">{mcpMeta[s.state].label}</span>
+                    <span className="shrink-0 text-muted">{t(mcpMeta[s.state].label)}</span>
                   </li>
                 ))}
               </ul>
@@ -219,63 +219,63 @@ export function Overview() {
         ) : (
           <p className="text-[13px] text-muted">
             {mcpBusy
-              ? "Connecting to each server. This takes 30–60 seconds."
-              : "Not checked yet. Checking starts each server through claude mcp list, which takes 30–60 seconds."}
+              ? t("overview.mcpConnecting")
+              : t("overview.mcpNotChecked")}
           </p>
         )}
       </Tile>
 
       <Tile
-        title="Skill health"
+        title={t("overview.health")}
         icon={CircleAlert}
         actions={
           withIssues.length > 0 && (
             <Button variant="ghost" size="sm" onClick={() => browse({ flags: ["issues"] })}>
-              Show in Library
+              {t("overview.showInLibrary")}
             </Button>
           )
         }
       >
         <Big
-          value={withIssues.length || "None"}
+          value={withIssues.length || t("overview.none")}
           tone={withIssues.length ? "text-danger" : undefined}
-          label={withIssues.length ? (withIssues.length === 1 ? "skill with problems" : "skills with problems") : "No problems found in your skills"}
+          label={withIssues.length ? t("overview.withIssues", { count: withIssues.length }) : t("overview.noIssues")}
         />
-        {withIssues.length > 0 && <p className="mt-1 line-clamp-2 text-xs text-muted">{withIssues[0].issues[0].message}</p>}
+        {withIssues.length > 0 && <p className="mt-1 line-clamp-2 text-xs text-muted">{issueText(withIssues[0].issues[0])}</p>}
       </Tile>
 
       <Tile
-        title="Changed upstream"
+        title={t("overview.changed")}
         icon={FolderSymlink}
         actions={
           moved + removed > 0 && (
             <Button size="sm" onClick={() => setScreen("cleanup")}>
-              Open Clean Up
+              {t("overview.openCleanUp")}
             </Button>
           )
         }
       >
         <Big
-          value={moved + removed || "None"}
-          label={moved + removed ? `${moved} moved, ${removed} removed upstream` : "No skills moved or removed upstream"}
+          value={moved + removed || t("overview.none")}
+          label={moved + removed ? t("overview.changedCounts", { moved, removed }) : t("overview.noChanges")}
         />
       </Tile>
 
       <Tile
-        title="Library"
+        title={t("rail.library")}
         icon={LibraryBig}
         actions={
           <Button variant="ghost" size="sm" onClick={() => browse({})}>
-            Open Library
+            {t("overview.openLibrary")}
           </Button>
         }
       >
         <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-[13px]">
-          <dt className="text-muted">Plugins</dt>
+          <dt className="text-muted">{t("overview.plugins")}</dt>
           <dd className="text-right font-mono tabular-nums">{plugins.length}</dd>
-          <dt className="text-muted">Turned off</dt>
+          <dt className="text-muted">{t("overview.turnedOff")}</dt>
           <dd className="text-right font-mono tabular-nums">{off}</dd>
-          <dt className="text-muted">Skills</dt>
+          <dt className="text-muted">{t("overview.skills")}</dt>
           <dd className="text-right font-mono tabular-nums">{items.length - plugins.length}</dd>
         </dl>
       </Tile>

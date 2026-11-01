@@ -34,6 +34,7 @@ const tauriApi = {
   openRepo: (itemId: string) => invoke<void>("open_item_repo", { itemId }),
   changelog: (itemId: string) => invoke<Changelog>("item_changelog", { itemId }),
   openChangelogLink: (itemId: string, url: string) => invoke<void>("open_changelog_link", { itemId, url }),
+  openProjectPage: (page: ProjectPage) => invoke<void>("open_project_page", { page }),
   /** Connects to every MCP server through `claude mcp list`; takes 30–60 s. */
   mcpStatus: () => invoke<McpReport>("mcp_status"),
   /** Counts uses from local transcripts (only what was appended since the last run). */
@@ -63,6 +64,7 @@ const tauriApi = {
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   environment: () => invoke<Environment>("environment"),
+  setAutostart: (on: boolean) => invoke<void>("set_autostart", { on }),
   pickFolder: async () => {
     const picked = await open({ directory: true, multiple: false, title: "Choose a project folder" });
     return typeof picked === "string" ? picked : null;
@@ -97,6 +99,9 @@ export const api: Api = mock
       Object.keys(tauriApi).map((k) => [k, async (...args: unknown[]) => ((await mock) as any)[k](...args)]),
     ) as Api)
   : tauriApi;
+
+/** Skillshelf's own pages on GitHub (see `open_project_page`). */
+export type ProjectPage = "repo" | "issues" | "changelog" | "license" | "translate";
 
 export function errorText(e: unknown): string {
   if (typeof e === "string") return e;

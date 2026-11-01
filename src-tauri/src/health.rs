@@ -13,6 +13,7 @@ pub fn issue(code: &str, message: impl Into<String>) -> Issue {
     Issue {
         code: code.into(),
         message: message.into(),
+        params: Default::default(),
     }
 }
 
@@ -55,7 +56,9 @@ pub fn check(items: &mut [Item]) {
                     "Another skill is also named `{name}` and loads in the same sessions ({}). Only one of them is used.",
                     clashes.join(", ")
                 ),
-            ));
+            )
+            .with("name", name)
+            .with("paths", clashes.join(", ")));
         }
     }
 }
@@ -80,10 +83,13 @@ fn skill_issues(skill_md: Option<&str>, description: Option<&str>) -> Vec<Issue>
             "no-description",
             "No description, so Claude can't tell when to use this skill.",
         )),
-        Some(n) if n > MAX_DESCRIPTION => out.push(issue(
-            "long-description",
-            format!("The description is {n} characters. Claude Code's limit is 1,024, so it may be cut off."),
-        )),
+        Some(n) if n > MAX_DESCRIPTION => out.push(
+            issue(
+                "long-description",
+                format!("The description is {n} characters. Claude Code's limit is 1,024, so it may be cut off."),
+            )
+            .with("count", n),
+        ),
         _ => {}
     }
     out

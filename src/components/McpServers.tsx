@@ -1,26 +1,28 @@
 import clsx from "clsx";
 import { CircleAlert, CircleCheck, CircleDashed, CircleHelp, Clock, KeyRound, LoaderCircle, Puzzle, RefreshCw, Server } from "lucide-react";
 import { useEffect } from "react";
+import { t, type TKey, useT } from "../i18n";
 import { relativeTime } from "../lib/format";
 import { useStore } from "../store";
 import type { McpServer, McpState } from "../types";
 import { Button, card } from "./ui";
 
-export const mcpMeta: Record<McpState, { label: string; icon: typeof CircleCheck; cls: string; order: number }> = {
-  failed: { label: "Failed", icon: CircleAlert, cls: "text-danger bg-danger/10 border-danger/35", order: 0 },
-  needsAuth: { label: "Needs sign-in", icon: KeyRound, cls: "text-info bg-info/10 border-info/30", order: 1 },
-  pending: { label: "Pending approval", icon: Clock, cls: "text-muted bg-surface-2 border-border", order: 2 },
-  notConfigured: { label: "Not configured", icon: CircleDashed, cls: "text-muted bg-surface-2 border-border", order: 3 },
-  unknown: { label: "Unknown status", icon: CircleHelp, cls: "text-muted bg-surface-2 border-border", order: 4 },
-  connected: { label: "Connected", icon: CircleCheck, cls: "text-accent bg-accent/10 border-accent/30", order: 5 },
+export const mcpMeta: Record<McpState, { label: TKey; icon: typeof CircleCheck; cls: string; order: number }> = {
+  failed: { label: "mcp.state.failed", icon: CircleAlert, cls: "text-danger bg-danger/10 border-danger/35", order: 0 },
+  needsAuth: { label: "mcp.state.needsAuth", icon: KeyRound, cls: "text-info bg-info/10 border-info/30", order: 1 },
+  pending: { label: "mcp.state.pending", icon: Clock, cls: "text-muted bg-surface-2 border-border", order: 2 },
+  notConfigured: { label: "mcp.state.notConfigured", icon: CircleDashed, cls: "text-muted bg-surface-2 border-border", order: 3 },
+  unknown: { label: "mcp.state.unknown", icon: CircleHelp, cls: "text-muted bg-surface-2 border-border", order: 4 },
+  connected: { label: "mcp.state.connected", icon: CircleCheck, cls: "text-accent bg-accent/10 border-accent/30", order: 5 },
 };
 
 function Chip({ state }: { state: McpState }) {
+  const t = useT();
   const { label, icon: Icon, cls } = mcpMeta[state];
   return (
     <span className={clsx("inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium whitespace-nowrap", cls)}>
       <Icon aria-hidden className="size-3.5" />
-      {label}
+      {t(label)}
     </span>
   );
 }
@@ -41,8 +43,8 @@ function groups(servers: McpServer[]): Group[] {
       map.set(key, {
         key,
         plugin: s.plugin,
-        title: s.plugin ?? (s.claudeAi ? "claude.ai connectors" : "Your servers"),
-        hint: s.plugin ? "From this plugin" : s.claudeAi ? "Connected in your claude.ai settings" : "Added with claude mcp add (user or project)",
+        title: s.plugin ?? (s.claudeAi ? t("mcp.claudeAi") : t("mcp.own")),
+        hint: s.plugin ? t("mcp.fromPlugin") : s.claudeAi ? t("mcp.claudeAiHint") : t("mcp.ownHint"),
         servers: [],
       });
     map.get(key)!.servers.push(s);
@@ -53,6 +55,7 @@ function groups(servers: McpServer[]): Group[] {
 }
 
 export function McpServers() {
+  const t = useT();
   const mcp = useStore((s) => s.mcp);
   const busy = useStore((s) => s.mcpBusy);
   const error = useStore((s) => s.mcpError);
@@ -76,36 +79,36 @@ export function McpServers() {
         <div className="min-w-0 flex-1">
           <p className="text-[13px]" aria-live="polite">
             {busy
-              ? "Connecting to each server. This takes 30–60 seconds…"
+              ? t("mcp.connecting")
               : mcp
                 ? [...counts]
                     .sort(([a], [b]) => mcpMeta[a].order - mcpMeta[b].order)
-                    .map(([s, n]) => `${n} ${mcpMeta[s].label.toLowerCase()}`)
-                    .join(" · ") || "No MCP servers configured"
-                : "Not checked yet"}
+                    .map(([s, n]) => t(`mcp.count.${s}`, { count: n }))
+                    .join(" · ") || t("mcp.none")
+                : t("mcp.notChecked")}
           </p>
           <p className="text-xs text-muted">
-            {mcp && `Checked ${relativeTime(mcp.checkedAt)}. `}Runs claude mcp list, which starts each server. Only the host of each URL is shown.
+            {mcp && `${t("mcp.checked", { time: relativeTime(mcp.checkedAt) })} `}{t("mcp.runsList")}
           </p>
         </div>
         <Button size="sm" disabled={busy} onClick={() => void load()}>
           {busy ? <LoaderCircle aria-hidden className="size-3.5 animate-spin" /> : <RefreshCw aria-hidden className="size-3.5" />}
-          {busy ? "Checking…" : "Check servers"}
+          {busy ? t("mcp.checking") : t("mcp.check")}
         </Button>
       </div>
 
       {error && (
         <div role="alert" className="flex shrink-0 items-start gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[13px]">
           <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-danger" />
-          <p className="min-w-0 flex-1">Couldn't list MCP servers: {error}</p>
+          <p className="min-w-0 flex-1">{t("mcp.listFailed", { error })}</p>
         </div>
       )}
 
       {mcp && mcp.servers.length === 0 && (
         <div className={clsx(card, "flex shrink-0 flex-col items-center gap-2 p-8 text-center")}>
           <Server aria-hidden className="size-8 text-muted" />
-          <p className="font-medium">No MCP servers</p>
-          <p className="max-w-sm text-[13px] text-muted">Plugins that ship servers, claude.ai connectors and servers added with claude mcp add show up here.</p>
+          <p className="font-medium">{t("mcp.empty")}</p>
+          <p className="max-w-sm text-[13px] text-muted">{t("mcp.emptyHint")}</p>
         </div>
       )}
 

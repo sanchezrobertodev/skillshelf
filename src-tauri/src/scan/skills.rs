@@ -57,7 +57,8 @@ pub fn scan(settings: &Settings, warnings: &mut Vec<String>) -> Vec<Item> {
                     "Installed with the skills CLI, but its link in {} is missing, so Claude Code doesn't load it. Reinstall it to restore the link.",
                     user_dir.display()
                 ),
-            ));
+            )
+            .with("folder", user_dir.display()));
             items.push(item);
         }
     }
@@ -154,7 +155,8 @@ fn user_skill(dir: &Path, lock: &HashMap<String, LockEntry>) -> Item {
                 "This folder replaced the skills CLI's link, so updates go to {} while Claude Code keeps loading this copy.",
                 managed.display()
             ),
-        ));
+        )
+        .with("folder", managed.display()));
     }
     item.installed_at = entry.installed_at.clone();
     item.updated_at = entry.updated_at.clone();

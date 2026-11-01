@@ -1,0 +1,17 @@
+name: Translation
+description: Wrong or missing text in a language, or a request for a new language.
+labels: [translation]
+body:
+  - type: input
+    id: language
+    attributes:
+      label: Language
+    validations:
+      required: true
+  - type: textarea
+    id: text
+    attributes:
+      label: What's wrong
+      description: Where the text appears, what it says now and what it should say. To fix it yourself, see "Translations" in CONTRIBUTING.md.
+    validations:
+      required: true

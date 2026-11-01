@@ -2,8 +2,9 @@ import clsx from "clsx";
 import { ChevronRight, Download, FileCode, LoaderCircle, Plug, ShieldCheck, Webhook, Wrench } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { api, errorText } from "../api";
+import { type TKey, tx, useT } from "../i18n";
 import { changelogCounts, isEmpty, newestChange, useChangelog } from "../lib/changelog";
-import { relativeTime } from "../lib/format";
+import { relativeTime, riskText } from "../lib/format";
 import { useStore } from "../store";
 import type { Item, Risk } from "../types";
 import { Button, KindIcon, Modal } from "./ui";
@@ -12,15 +13,16 @@ import { Button, KindIcon, Modal } from "./ui";
 const LOOKUPS = 10;
 const FILES_SHOWN = 8;
 
-const riskMeta: Record<Risk["kind"], { label: string; icon: typeof Webhook }> = {
-  hooks: { label: "Hooks", icon: Webhook },
-  mcp: { label: "MCP servers", icon: Plug },
-  scripts: { label: "Scripts", icon: FileCode },
-  allowedTools: { label: "Allowed tools", icon: Wrench },
+const riskMeta: Record<Risk["kind"], { label: TKey; icon: typeof Webhook }> = {
+  hooks: { label: "review.risk.hooks", icon: Webhook },
+  mcp: { label: "review.risk.mcp", icon: Plug },
+  scripts: { label: "review.risk.scripts", icon: FileCode },
+  allowedTools: { label: "review.risk.allowedTools", icon: Wrench },
 };
 
 /** A flag with its reason and files, shown on hover or keyboard focus. Fixed position so the sheet's scroll area can't clip it. */
 function RiskChip({ risk }: { risk: Risk }) {
+  const t = useT();
   const id = useId();
   const btn = useRef<HTMLButtonElement>(null);
   const [at, setAt] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
@@ -46,7 +48,7 @@ function RiskChip({ risk }: { risk: Risk }) {
         className="inline-flex h-6 items-center gap-1 rounded-full border border-warn/35 bg-warn/12 px-2 text-xs font-medium text-warn"
       >
         <Icon aria-hidden className="size-3.5" />
-        {label}
+        {t(label)}
       </button>
       <span
         id={id}
@@ -54,14 +56,14 @@ function RiskChip({ risk }: { risk: Risk }) {
         style={at ?? undefined}
         className={clsx("fixed z-50 w-80 rounded-lg border border-border bg-surface p-3 text-xs shadow-card", !at && "hidden")}
       >
-        <span className="block text-fg">{risk.why}</span>
+        <span className="block text-fg">{riskText(risk)}</span>
         <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted">
           {risk.files.slice(0, FILES_SHOWN).map((f) => (
             <li key={f} className="truncate">
               {f}
             </li>
           ))}
-          {risk.files.length > FILES_SHOWN && <li>+{risk.files.length - FILES_SHOWN} more</li>}
+          {risk.files.length > FILES_SHOWN && <li>{t("review.moreFiles", { count: risk.files.length - FILES_SHOWN })}</li>}
         </ul>
       </span>
     </>
@@ -69,6 +71,7 @@ function RiskChip({ risk }: { risk: Risk }) {
 }
 
 function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onError: (e: string) => void }) {
+  const t = useT();
   const [wanted, setWanted] = useState(lookup);
   const [open, setOpen] = useState(false);
   const { state, retry } = useChangelog(item, wanted);
@@ -76,22 +79,22 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
   if (!wanted)
     return (
       <Button size="sm" variant="ghost" className="-ml-2.5" onClick={() => setWanted(true)}>
-        Look up changes
+        {t("review.lookUp")}
       </Button>
     );
   if (state.status === "idle" || state.status === "loading")
     return (
       <p className="flex items-center gap-1.5 text-xs text-muted">
         <LoaderCircle aria-hidden className="size-3 animate-spin" />
-        Looking up what changed…
+        {t("review.lookingUp")}
       </p>
     );
   if (state.status === "error")
     return (
       <p className="flex items-center gap-2 text-xs text-muted">
-        Couldn't load what changed.
+        {t("review.lookupFailed")}
         <button type="button" onClick={retry} className="rounded font-medium text-accent hover:underline">
-          Try again
+          {t("review.tryAgain")}
         </button>
       </p>
     );
@@ -105,23 +108,19 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
         <p className="text-xs text-muted">
           {counts}
           {counts && log.installed && " · "}
-          {log.installed && (
-            <>
-              since your version <span className="font-mono">{log.installed.sha.slice(0, 7)}</span>
-            </>
-          )}
+          {log.installed && tx("review.sinceVersion", { sha: <span className="font-mono">{log.installed.sha.slice(0, 7)}</span> })}
         </p>
       )}
-      {isEmpty(log) && <p className="text-xs text-muted">{log.note ?? "No changelog available."}</p>}
+      {isEmpty(log) && <p className="text-xs text-muted">{log.note ?? t("review.noChangelog")}</p>}
       {newest && (
         <p className="line-clamp-1 text-xs" title={newest}>
-          Latest: {newest}
+          {t("review.latest", { change: newest })}
         </p>
       )}
       {log.risks === null ? (
-        <p className="text-xs text-muted">Couldn't check for new hooks, scripts or MCP servers.</p>
+        <p className="text-xs text-muted">{t("review.risksFailed")}</p>
       ) : log.risks.length ? (
-        <ul aria-label="Changes that run without asking" className="flex flex-wrap gap-1.5">
+        <ul aria-label={t("review.risksLabel")} className="flex flex-wrap gap-1.5">
           {log.risks.map((r) => (
             <li key={r.kind}>
               <RiskChip risk={r} />
@@ -131,7 +130,7 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
       ) : (
         <p className="flex items-center gap-1 text-xs text-muted">
           <ShieldCheck aria-hidden className="size-3.5" />
-          No hook, script, MCP server or allowed-tools changes.
+          {t("review.noRisks")}
         </p>
       )}
       {log.entries.length > 0 && (
@@ -143,7 +142,7 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
             className="-ml-1 flex items-center gap-1 rounded px-1 text-xs font-medium text-muted hover:text-fg"
           >
             <ChevronRight aria-hidden className={clsx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
-            {open ? "Hide commits" : `Show ${log.entries.length} commit${log.entries.length === 1 ? "" : "s"}`}
+            {open ? t("review.hideCommits") : t("review.showCommits", { count: log.entries.length })}
           </button>
           {open && (
             <ol className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-bg p-2">
@@ -154,7 +153,7 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
                       type="button"
                       onClick={() => api.openChangelogLink(item.id, e.url!).catch((err) => onError(errorText(err)))}
                       className="shrink-0 rounded font-mono text-accent hover:underline"
-                      aria-label={`Open commit ${e.sha.slice(0, 7)} on GitHub`}
+                      aria-label={t("review.openCommit", { sha: e.sha.slice(0, 7) })}
                     >
                       {e.sha.slice(0, 7)}
                     </button>
@@ -168,7 +167,7 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
                 </li>
               ))}
               {log.total > log.entries.length && (
-                <li className="text-xs text-muted">and {log.total - log.entries.length} more</li>
+                <li className="text-xs text-muted">{t("review.andMore", { count: log.total - log.entries.length })}</li>
               )}
             </ol>
           )}
@@ -180,6 +179,7 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
 
 /** Confirms updates: untick to skip, with what changed and what now runs without asking for each. */
 export function ReviewSheet({ items }: { items: Item[] }) {
+  const t = useT();
   const confirm = useStore((s) => s.confirm);
   const run = useStore((s) => s.run);
   const [ticked, setTicked] = useState(() => new Set(items.map((i) => i.id)));
@@ -197,11 +197,11 @@ export function ReviewSheet({ items }: { items: Item[] }) {
   return (
     <Modal
       wide
-      title={many ? `Review ${items.length} updates` : `Update ${items[0].name}?`}
+      title={many ? t("review.title", { count: items.length }) : t("review.titleOne", { name: items[0].name })}
       onClose={close}
       footer={
         <>
-          <Button onClick={close}>Cancel</Button>
+          <Button onClick={close}>{t("common.cancel")}</Button>
           <Button
             data-autofocus
             variant="primary"
@@ -212,7 +212,11 @@ export function ReviewSheet({ items }: { items: Item[] }) {
             }}
           >
             <Download aria-hidden className="size-4" />
-            {!many ? "Update" : chosen.length === items.length ? `Update all ${items.length}` : `Update ${chosen.length} of ${items.length}`}
+            {!many
+              ? t("review.update")
+              : chosen.length === items.length
+                ? t("review.updateAll", { count: items.length })
+                : t("review.updateSome", { done: chosen.length, total: items.length })}
           </Button>
         </>
       }
@@ -223,7 +227,7 @@ export function ReviewSheet({ items }: { items: Item[] }) {
             {many && (
               <input
                 type="checkbox"
-                aria-label={`Update ${i.name}`}
+                aria-label={t("review.updateItem", { name: i.name })}
                 checked={ticked.has(i.id)}
                 onChange={() => toggle(i.id)}
                 className="mt-0.5 size-4 shrink-0 cursor-pointer accent-[var(--accent)]"
@@ -234,20 +238,20 @@ export function ReviewSheet({ items }: { items: Item[] }) {
               <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] font-medium">
                 <span className="truncate">{i.name}</span>
                 <span className="font-mono text-xs font-normal text-muted">
-                  {i.version ?? "?"} → {i.latest ?? "latest"}
+                  {i.version ?? "?"} → {i.latest ?? t("review.latestVersion")}
                 </span>
               </div>
               {i.status === "updateAvailable" ? (
                 <Changes item={i} lookup={idx < LOOKUPS} onError={setError} />
               ) : (
-                <p className="text-xs text-muted">No update was detected; this runs the update anyway.</p>
+                <p className="text-xs text-muted">{t("review.noUpdate")}</p>
               )}
             </div>
           </li>
         ))}
       </ul>
       {items.some((i) => i.kind === "plugin") && (
-        <p className="mt-3 text-xs text-muted">Restart Claude Code afterwards so it loads the updated plugins.</p>
+        <p className="mt-3 text-xs text-muted">{t("review.restart")}</p>
       )}
       {error && (
         <p role="alert" className="mt-3 text-[13px] text-danger">

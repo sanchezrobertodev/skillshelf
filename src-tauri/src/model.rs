@@ -100,7 +100,18 @@ pub struct Item {
 pub struct Issue {
     /// no-frontmatter | bad-frontmatter | no-description | long-description | link-missing | link-replaced | duplicate-name
     pub code: String,
+    /// English. The UI shows its own text for `code`, filled from `params`.
     pub message: String,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
+}
+
+impl Issue {
+    /// Adds a value the UI's text for this issue fills in.
+    pub fn with(mut self, key: &str, value: impl ToString) -> Self {
+        self.params.insert(key.into(), value.to_string());
+        self
+    }
 }
 
 /// Where a skill went upstream, or the commit that deleted it.

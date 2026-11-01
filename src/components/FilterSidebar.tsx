@@ -1,11 +1,14 @@
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import { type TKey, useT } from "../i18n";
 import { countBy, flagTest, matches, type Facet } from "../lib/filter";
-import { kindLabel, sourceHelp, sourceLabel, statusLabel, statusOrder } from "../lib/format";
+import { sourceHelp, sourceLabel, statusLabel, statusOrder } from "../lib/format";
 import type { Filters, Flag } from "../lib/prefs";
 import { useStore } from "../store";
 import type { Kind, Source, Status } from "../types";
+
+const kindPlural: Record<Kind, TKey> = { plugin: "filters.plugins", skill: "filters.skills" };
 
 interface Option<T extends string> {
   value: T;
@@ -27,6 +30,7 @@ function Group<T extends string>({
   onToggle: (v: T) => void;
   limit?: number;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   if (!options.length) return null;
   const shown = limit && !expanded ? options.slice(0, limit) : options;
@@ -68,7 +72,7 @@ function Group<T extends string>({
           aria-expanded={expanded}
         >
           <ChevronDown aria-hidden className={clsx("size-3.5 transition-transform", expanded && "rotate-180")} />
-          {expanded ? "Show fewer" : `Show all ${options.length}`}
+          {expanded ? t("filters.showFewer") : t("filters.showAll", { count: options.length })}
         </button>
       )}
     </fieldset>
@@ -80,6 +84,7 @@ function toggle<T>(list: T[], v: T): T[] {
 }
 
 export function FilterSidebar() {
+  const t = useT();
   const items = useStore((s) => s.items);
   const filters = useStore((s) => s.filters);
   const setFilters = useStore((s) => s.setFilters);
@@ -103,7 +108,7 @@ export function FilterSidebar() {
 
   const kindOpts: Option<Kind>[] = (["plugin", "skill"] as Kind[]).map((k) => ({
     value: k,
-    label: kindLabel[k] + "s",
+    label: t(kindPlural[k]),
     count: facets.kinds.get(k) ?? 0,
   }));
   const presentStatuses = [...new Set(items.map((i) => i.status))].sort((a, b) => statusOrder[a] - statusOrder[b]);
@@ -127,10 +132,10 @@ export function FilterSidebar() {
 
   const flagOpts: Option<Flag>[] = (
     [
-      ["unused", "Unused", "Enabled plugins with no uses in 30 days"],
-      ["issues", "Has issues", "Skills with frontmatter, description, link or duplicate-name problems"],
-      ["hooks", "Has hooks", "Hooks run on their own, so they never show up as uses"],
-      ["mod", "Mods", "Plugins that change Claude Code itself (hooks/hooks.json loads modules)"],
+      ["unused", t("filters.unused"), t("filters.unusedHint")],
+      ["issues", t("filters.issues"), t("filters.issuesHint")],
+      ["hooks", t("filters.hooks"), t("filters.hooksHint")],
+      ["mod", t("filters.mods"), t("filters.modsHint")],
     ] as const
   )
     .filter(([k]) => k !== "unused" || usage)
@@ -145,43 +150,43 @@ export function FilterSidebar() {
   const set = (f: Partial<Filters>) => setFilters(f);
 
   return (
-    <aside aria-label="Filters" className="flex w-[216px] shrink-0 flex-col pl-3">
+    <aside aria-label={t("filters.title")} className="flex w-[216px] shrink-0 flex-col pl-3">
       <div className="flex h-11 items-center justify-between px-4">
-        <h2 className="text-[13px] font-semibold">Filters</h2>
+        <h2 className="text-[13px] font-semibold">{t("filters.title")}</h2>
         {active > 0 && (
           <button type="button" onClick={clearFilters} className="rounded px-1.5 py-0.5 text-xs text-accent hover:underline">
-            Clear {active}
+            {t("filters.clear", { count: active })}
           </button>
         )}
       </div>
       <div className="flex-1 overflow-x-hidden overflow-y-auto px-2 pb-4">
-        <Group title="Type" options={kindOpts} selected={filters.kinds} onToggle={(v) => set({ kinds: toggle(filters.kinds, v) })} />
+        <Group title={t("filters.type")} options={kindOpts} selected={filters.kinds} onToggle={(v) => set({ kinds: toggle(filters.kinds, v) })} />
         <Group
-          title="Status"
+          title={t("filters.status")}
           options={statusOpts}
           selected={filters.statuses}
           onToggle={(v) => set({ statuses: toggle(filters.statuses, v) })}
         />
         <Group
-          title="Show only"
+          title={t("filters.showOnly")}
           options={flagOpts}
           selected={filters.flags}
           onToggle={(v) => set({ flags: toggle(filters.flags, v) })}
         />
         <Group
-          title="Source"
+          title={t("filters.source")}
           options={sourceOpts}
           selected={filters.sources}
           onToggle={(v) => set({ sources: toggle(filters.sources, v) })}
         />
         <fieldset className="mb-5">
-          <legend className="mb-1.5 px-2 text-[11px] font-semibold tracking-wider text-muted uppercase">Plugin state</legend>
+          <legend className="mb-1.5 px-2 text-[11px] font-semibold tracking-wider text-muted uppercase">{t("filters.pluginState")}</legend>
           <div role="radiogroup" className="mx-2 grid grid-cols-3 rounded-md border border-border-strong p-0.5 text-xs">
             {(
               [
-                ["all", "All", null],
-                ["enabled", "On", enabledCount],
-                ["disabled", "Off", disabledCount],
+                ["all", t("filters.all"), null],
+                ["enabled", t("filters.on"), enabledCount],
+                ["disabled", t("filters.off"), disabledCount],
               ] as const
             ).map(([v, label, n]) => (
               <button
@@ -202,7 +207,7 @@ export function FilterSidebar() {
           </div>
         </fieldset>
         <Group
-          title="Marketplace / repo"
+          title={t("filters.origin")}
           options={originOpts}
           selected={filters.origins}
           onToggle={(v) => set({ origins: toggle(filters.origins, v) })}
