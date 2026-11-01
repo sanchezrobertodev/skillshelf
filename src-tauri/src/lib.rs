@@ -70,8 +70,10 @@ impl AppState {
 #[tauri::command]
 async fn scan(state: State<'_, AppState>) -> Result<ScanResult, String> {
     let settings = state.settings.lock().unwrap().clone();
-    let result = scan::scan_all(&settings).await;
-    *state.items.lock().unwrap() = result.items.clone();
+    let mut result = scan::scan_all(&settings).await;
+    let mut items = state.items.lock().unwrap();
+    scan::keep_verdicts(&items, &mut result.items);
+    *items = result.items.clone();
     Ok(result)
 }
 
