@@ -1,19 +1,22 @@
-import { BrushCleaning, CircleAlert, LayoutDashboard, RotateCcw, Server, TriangleAlert, X } from "lucide-react";
+import { CircleAlert, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { useAppUpdate } from "./appUpdate";
 import { AppUpdateBanner, ReleaseNotesDialog } from "./components/AppUpdate";
+import { CleanUp } from "./components/CleanUp";
 import { DetailPanel } from "./components/DetailPanel";
 import { ConfirmDialogs, SettingsDialog } from "./components/Dialogs";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { ItemList } from "./components/ItemList";
+import { McpServers } from "./components/McpServers";
+import { Overview } from "./components/Overview";
 import { QueueDrawer } from "./components/QueueDrawer";
 import { Rail } from "./components/Rail";
 import { Toolbar } from "./components/Toolbar";
-import { card, IconButton } from "./components/ui";
+import { IconButton } from "./components/ui";
 import { matches, sortItems } from "./lib/filter";
 import { applyTheme, onSystemThemeChange } from "./lib/prefs";
-import { type Screen, useStore } from "./store";
+import { useStore } from "./store";
 
 function useWide(min: number) {
   const [wide, setWide] = useState(() => window.innerWidth >= min);
@@ -62,6 +65,7 @@ export default function App() {
   const restartNeeded = useStore((s) => s.restartNeeded);
   const theme = useStore((s) => s.theme);
   const screen = useStore((s) => s.screen);
+  const usage = useStore((s) => s.usage);
   const wide = useWide(1240);
 
   useEffect(() => {
@@ -77,8 +81,8 @@ export default function App() {
   useEffect(() => (theme === "system" ? onSystemThemeChange(() => applyTheme("system")) : undefined), [theme]);
 
   const rows = useMemo(
-    () => sortItems(items.filter((i) => matches(i, filters, query)), sort.key, sort.desc),
-    [items, filters, query, sort],
+    () => sortItems(items.filter((i) => matches(i, filters, query, usage)), sort.key, sort.desc, usage),
+    [items, filters, query, sort, usage],
   );
   const active = detailOpen ? items.find((i) => i.id === activeId) : undefined;
 
@@ -111,32 +115,18 @@ export default function App() {
             <ItemList rows={rows} />
             {active && <DetailPanel item={active} overlay={!wide} />}
           </div>
+        ) : screen === "overview" ? (
+          <Overview />
+        ) : screen === "cleanup" ? (
+          <CleanUp />
         ) : (
-          <Pending screen={screen} />
+          <McpServers />
         )}
         <QueueDrawer />
       </main>
       <ConfirmDialogs />
       <SettingsDialog />
       <ReleaseNotesDialog />
-    </div>
-  );
-}
-
-// shortcut: placeholders until the Overview, Clean Up and MCP screens land (plan M4); delete with them.
-const pending: Record<Exclude<Screen, "library">, { icon: typeof Server; text: string }> = {
-  overview: { icon: LayoutDashboard, text: "Updates, context cost, unused plugins and problems at a glance." },
-  cleanup: { icon: BrushCleaning, text: "Unused plugins by context cost, hook plugins, and skills moved or removed upstream." },
-  mcp: { icon: Server, text: "Every MCP server, grouped by the plugin that brings it, with its connection status." },
-};
-
-function Pending({ screen }: { screen: Exclude<Screen, "library"> }) {
-  const { icon: Icon, text } = pending[screen];
-  return (
-    <div className={`mx-5 mb-4 flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center ${card}`}>
-      <Icon aria-hidden className="size-8 text-muted" />
-      <p className="font-medium">Coming in the next update</p>
-      <p className="max-w-sm text-[13px] text-muted">{text}</p>
     </div>
   );
 }

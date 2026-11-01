@@ -1,37 +1,60 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, FilterX, Power, PowerOff, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CircleAlert, Download, FilterX, Power, PowerOff, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { canToggle, canUninstall, canUpdate, relativeTime, sourceLabel } from "../lib/format";
+import { loadsEverywhere, shortCount } from "../lib/insights";
 import type { SortKey } from "../lib/prefs";
 import { useStore } from "../store";
 import type { Item } from "../types";
 import { ContextMenu, type MenuTarget } from "./ContextMenu";
 import { Button, card, Checkbox, KindIcon, StatusBadge, Switch } from "./ui";
 
-type Layout = "full" | "wide" | "medium" | "narrow";
+type Col = "source" | "version" | "cost" | "uses" | "updated";
 
-const templates: Record<Layout, string> = {
-  full: "40px minmax(220px,1fr) 136px 172px 152px 92px 76px",
-  wide: "40px minmax(190px,1fr) 136px 172px 152px 76px",
-  medium: "40px minmax(180px,1fr) 172px 152px 76px",
-  narrow: "40px minmax(160px,1fr) 152px 76px",
-};
-
+/** Optional columns, most important first; as the list narrows they drop from the end. */
+const optional: [Col, number][] = [
+  ["version", 172],
+  ["source", 136],
+  ["cost", 72],
+  ["uses", 64],
+  ["updated", 92],
+];
+const width = Object.fromEntries(optional) as Record<Col, number>;
+const GAP = 12;
 const ROW_HEIGHT = 52;
+// Checkbox, name at its minimum, status and actions, plus the row's side padding.
+const BASE = 40 + 190 + 152 + 76 + 3 * GAP + 32;
 
-function useLayout(ref: React.RefObject<HTMLElement | null>): Layout {
-  const [layout, setLayout] = useState<Layout>("full");
+function useColumns(ref: React.RefObject<HTMLElement | null>): Set<Col> {
+  const [cols, setCols] = useState<Set<Col>>(() => new Set(optional.map(([c]) => c)));
   useEffect(() => {
     if (!ref.current) return;
     const ro = new ResizeObserver(([e]) => {
-      const w = e.contentRect.width;
-      setLayout(w >= 1000 ? "full" : w >= 860 ? "wide" : w >= 700 ? "medium" : "narrow");
+      let used = BASE;
+      const next: Col[] = [];
+      for (const [c, w] of optional) {
+        if (used + w + GAP > e.contentRect.width) break;
+        used += w + GAP;
+        next.push(c);
+      }
+      setCols((prev) => (prev.size === next.length && next.every((c) => prev.has(c)) ? prev : new Set(next)));
     });
     ro.observe(ref.current);
     return () => ro.disconnect();
   }, [ref]);
-  return layout;
+  return cols;
+}
+
+function template(cols: Set<Col>) {
+  const px = (list: Col[]) => list.filter((c) => cols.has(c)).map((c) => `${width[c]}px`);
+  return ["40px", "minmax(190px,1fr)", ...px(["source", "version"]), "152px", ...px(["cost", "uses", "updated"]), "76px"].join(" ");
+}
+
+function costTitle(item: Item) {
+  if (item.enabled === false) return "Off, so it adds nothing now. Estimated tokens when on";
+  if (!loadsEverywhere(item)) return "Loads only in its project. Estimated tokens per session there";
+  return "Estimated tokens it adds to every session";
 }
 
 function SortHeader({ label, k, className }: { label: string; k: SortKey; className?: string }) {
@@ -206,8 +229,9 @@ export function ItemList({ rows }: { rows: Item[] }) {
 
   const wrap = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const layout = useLayout(wrap);
-  const template = templates[layout];
+  const cols = useColumns(wrap);
+  const usage = useStore((s) => s.usage);
+  const grid = template(cols);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -311,7 +335,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
           role="row"
           aria-rowindex={1}
           className="grid h-10 shrink-0 items-center gap-3 border-b border-border bg-surface px-4"
-          style={{ gridTemplateColumns: template }}
+          style={{ gridTemplateColumns: grid }}
         >
           <div role="columnheader" className="flex items-center">
             <Checkbox
@@ -322,10 +346,12 @@ export function ItemList({ rows }: { rows: Item[] }) {
             />
           </div>
           <SortHeader label="Name" k="name" />
-          {(layout === "full" || layout === "wide") && <SortHeader label="Source" k="source" />}
-          {layout !== "narrow" && <SortHeader label="Version" k="version" />}
+          {cols.has("source") && <SortHeader label="Source" k="source" />}
+          {cols.has("version") && <SortHeader label="Version" k="version" />}
           <SortHeader label="Status" k="status" />
-          {layout === "full" && <SortHeader label="Updated" k="updated" />}
+          {cols.has("cost") && <SortHeader label="Cost" k="cost" />}
+          {cols.has("uses") && <SortHeader label="Uses" k="uses" />}
+          {cols.has("updated") && <SortHeader label="Updated" k="updated" />}
           <div role="columnheader" className="text-right text-xs font-semibold tracking-wide text-muted uppercase">
             <span className="sr-only">Actions</span>
           </div>
@@ -371,7 +397,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
                       "absolute inset-x-0 grid cursor-pointer items-center gap-3 border-b border-border px-4 transition-colors duration-100",
                       isActive ? "bg-surface-2 shadow-[inset_3px_0_0_var(--accent)]" : isSelected ? "bg-accent/6" : "hover:bg-surface-hover",
                     )}
-                    style={{ height: ROW_HEIGHT, transform: `translateY(${v.start}px)`, gridTemplateColumns: template }}
+                    style={{ height: ROW_HEIGHT, transform: `translateY(${v.start}px)`, gridTemplateColumns: grid }}
                   >
                     <div role="gridcell" className="flex items-center">
                       <Checkbox label={`Select ${item.name}`} checked={isSelected} onChange={() => toggleSelected(item.id)} />
@@ -383,11 +409,28 @@ export function ItemList({ rows }: { rows: Item[] }) {
                         {item.enabled === false && (
                           <span className="rounded border border-border-strong px-1.5 text-[11px] text-muted">Disabled</span>
                         )}
+                        {item.isMod && (
+                          <span
+                            title="Changes Claude Code itself: its hooks/hooks.json loads modules"
+                            className="rounded border border-info/30 bg-info/10 px-1.5 text-[11px] font-medium text-info"
+                          >
+                            Mod
+                          </span>
+                        )}
+                        {item.issues.length > 0 && (
+                          <span
+                            title={item.issues.map((i) => i.message).join("\n")}
+                            className="inline-flex shrink-0 items-center gap-1 rounded border border-danger/35 bg-danger/10 px-1.5 text-[11px] font-medium text-danger"
+                          >
+                            <CircleAlert aria-hidden className="size-3" />
+                            {item.issues.length === 1 ? "1 issue" : `${item.issues.length} issues`}
+                          </span>
+                        )}
                         <span className="sr-only">{item.kind}</span>
                       </div>
                       <p className="truncate pl-6 text-xs text-muted">{item.description ?? "No description"}</p>
                     </div>
-                    {(layout === "full" || layout === "wide") && (
+                    {cols.has("source") && (
                       <div role="gridcell" className="min-w-0 text-[13px]">
                         <div className="truncate">{sourceLabel[item.source]}</div>
                         <div className="truncate font-mono text-[11px] text-muted" title={item.origin ?? undefined}>
@@ -395,7 +438,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
                         </div>
                       </div>
                     )}
-                    {layout !== "narrow" && (
+                    {cols.has("version") && (
                       <div role="gridcell" className="min-w-0">
                         <VersionCell item={item} />
                       </div>
@@ -403,7 +446,21 @@ export function ItemList({ rows }: { rows: Item[] }) {
                     <div role="gridcell" className="min-w-0">
                       <StatusBadge status={item.status} checking={busy === "checking"} title={item.statusDetail} />
                     </div>
-                    {layout === "full" && (
+                    {cols.has("cost") && (
+                      <div
+                        role="gridcell"
+                        title={costTitle(item)}
+                        className={clsx("font-mono text-xs tabular-nums", !loadsEverywhere(item) && "text-muted")}
+                      >
+                        {item.cost?.total ? `≈${shortCount(item.cost.total)}` : "—"}
+                      </div>
+                    )}
+                    {cols.has("uses") && (
+                      <div role="gridcell" title="Uses in the last 30 days, from your local transcripts" className="font-mono text-xs tabular-nums">
+                        {usage ? (usage[item.id]?.uses ?? 0) : <span className="text-muted" aria-label="Counting">…</span>}
+                      </div>
+                    )}
+                    {cols.has("updated") && (
                       <div role="gridcell" className="text-xs text-muted" title={item.updatedAt ?? item.installedAt ?? undefined}>
                         {relativeTime(item.updatedAt ?? item.installedAt)}
                       </div>

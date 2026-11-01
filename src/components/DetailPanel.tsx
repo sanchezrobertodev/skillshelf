@@ -1,12 +1,13 @@
 import clsx from "clsx";
-import { Bot, Copy, Download, ExternalLink, FolderOpen, Hammer, Plug, Power, PowerOff, ScrollText, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
+import { Bot, Copy, Download, ExternalLink, FolderOpen, Hammer, Plug, Power, PowerOff, RotateCcw, ScrollText, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { api, errorText } from "../api";
 import { showsChangelog } from "../lib/changelog";
-import { canToggle, canUninstall, canUpdate, fullDate, kindLabel, sourceHelp, sourceLabel } from "../lib/format";
+import { canReinstall, canToggle, canUninstall, canUpdate, fullDate, kindLabel, sourceHelp, sourceLabel } from "../lib/format";
 import { useStore } from "../store";
 import type { Child, Item } from "../types";
 import { ChangelogPanel } from "./Changelog";
+import { CostSection, IssueList, LastRunSection, ReadmeSection, UpstreamNote, UsageSection } from "./DetailSections";
 import { Button, card, IconButton, KindIcon, StatusBadge } from "./ui";
 
 const childMeta: Record<Child["kind"], { label: string; icon: typeof Bot }> = {
@@ -35,7 +36,9 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const running = Object.values(jobs).some((j) => j.itemId === item.id && (j.state === "queued" || j.state === "running"));
+  const mine = Object.values(jobs).filter((j) => j.itemId === item.id);
+  const running = mine.some((j) => j.state === "queued" || j.state === "running");
+  const finished = mine.length - mine.filter((j) => j.state === "queued" || j.state === "running").length;
   const groups = (Object.keys(childMeta) as Child["kind"][])
     .map((k) => ({ kind: k, list: item.children.filter((c) => c.kind === k) }))
     .filter((g) => g.list.length);
@@ -82,9 +85,10 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        {item.statusDetail && item.status !== "upToDate" && (
+        {item.statusDetail && item.status !== "upToDate" && !item.upstream && (
           <p className="mb-3 text-[13px] text-muted">{item.statusDetail}</p>
         )}
+        <UpstreamNote item={item} onError={setError} />
 
         <div className="mb-5 flex flex-wrap gap-2">
           {canUpdate(item) && (
@@ -96,6 +100,12 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
             >
               <Download aria-hidden className="size-3.5" />
               {item.status === "updateAvailable" ? `Update to ${item.latest ?? "latest"}` : "Update"}
+            </Button>
+          )}
+          {canReinstall(item) && (
+            <Button size="sm" variant="primary" disabled={running} onClick={() => void run([{ itemId: item.id, action: "reinstall" }])}>
+              <RotateCcw aria-hidden className="size-3.5" />
+              Reinstall
             </Button>
           )}
           {canToggle(item) && (
@@ -146,7 +156,12 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
           </ul>
         )}
 
+        <IssueList item={item} />
+
         {item.status === "updateAvailable" && <ChangelogPanel key={item.id} item={item} />}
+
+        <CostSection item={item} />
+        <UsageSection item={item} />
 
         <dl className="mb-6 grid grid-cols-[104px_1fr] gap-x-3 gap-y-2 text-[13px]">
           <Fact label="Type">{kindLabel[item.kind]}</Fact>
@@ -179,6 +194,9 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
             </div>
           </div>
         )}
+
+        <ReadmeSection key={item.id} item={item} />
+        <LastRunSection item={item} finished={finished} />
 
         {item.status !== "updateAvailable" && showsChangelog(item) && <ChangelogPanel key={item.id} item={item} />}
 

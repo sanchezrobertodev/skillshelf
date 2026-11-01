@@ -1,8 +1,8 @@
 import clsx from "clsx";
-import { Download, ExternalLink, FolderOpen, Power, PowerOff, Trash2 } from "lucide-react";
+import { Download, ExternalLink, FolderOpen, Power, PowerOff, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, errorText } from "../api";
-import { canToggle, canUninstall } from "../lib/format";
+import { canReinstall, canToggle, canUninstall } from "../lib/format";
 import { updatable, useStore } from "../store";
 import type { Item } from "../types";
 
@@ -34,10 +34,12 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
   const off = items.filter((i) => canToggle(i) && i.enabled === false);
   const on = items.filter((i) => canToggle(i) && i.enabled === true);
   const removable = items.filter(canUninstall);
+  const movable = items.filter(canReinstall);
   const attempt = (fn: () => Promise<void>) => fn().catch((e) => useStore.setState({ error: errorText(e) }));
 
   const entries: Entry[] = [
     toUpdate.length && { label: `Update${count(toUpdate.length)}…`, icon: Download, act: () => confirm({ type: "update", items: toUpdate }) },
+    movable.length && { label: `Reinstall${count(movable.length)}`, icon: RotateCcw, act: () => void run(movable.map((i) => ({ itemId: i.id, action: "reinstall" as const }))) },
     off.length && { label: `Turn on${count(off.length)}`, icon: Power, act: () => void run(off.map((i) => ({ itemId: i.id, action: "enable" as const }))) },
     on.length && { label: `Turn off${count(on.length)}`, icon: PowerOff, act: () => void run(on.map((i) => ({ itemId: i.id, action: "disable" as const }))) },
     one?.path && { label: "Open folder", icon: FolderOpen, act: () => attempt(() => api.openFolder(one.id)) },

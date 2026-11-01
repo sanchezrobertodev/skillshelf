@@ -3,7 +3,9 @@
 import type { Kind, Source, Status } from "../types";
 
 export type Theme = "system" | "light" | "dark";
-export type SortKey = "name" | "kind" | "source" | "version" | "status" | "updated";
+export type SortKey = "name" | "kind" | "source" | "version" | "status" | "updated" | "cost" | "uses";
+/** "Show only" filters that cut across type and source. */
+export type Flag = "mod" | "issues" | "unused" | "hooks";
 
 export interface Filters {
   kinds: Kind[];
@@ -11,6 +13,7 @@ export interface Filters {
   sources: Source[];
   origins: string[];
   enabled: "all" | "enabled" | "disabled";
+  flags: Flag[];
 }
 
 export interface Prefs {
@@ -19,7 +22,7 @@ export interface Prefs {
   filters: Filters;
 }
 
-export const emptyFilters: Filters = { kinds: [], statuses: [], sources: [], origins: [], enabled: "all" };
+export const emptyFilters: Filters = { kinds: [], statuses: [], sources: [], origins: [], enabled: "all", flags: [] };
 
 const defaults: Prefs = {
   theme: "system",
