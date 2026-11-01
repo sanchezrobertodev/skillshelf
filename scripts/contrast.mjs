@@ -11,7 +11,11 @@ for (const [, selector, body] of css.matchAll(/((?::root|\[data-palette)[^{]*)\{
   const palette = selector.match(/data-palette="(\w+)"/)?.[1] ?? "workbench";
   const mode = selector.includes('data-theme="dark"') ? "dark" : "light";
   const vars = Object.fromEntries([...body.matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})/gi)].map(([, k, v]) => [k, v]));
-  themes[`${palette} ${mode}`] = vars;
+  const grad = body.match(/--accent-grad:([^;]*)/)?.[1].match(/#[0-9a-f]{6}/gi);
+  if (grad) vars.grad = grad;
+  // Merge like the cascade: rule blocks such as `[data-palette="workbench"] .card {}` add nothing here.
+  const key = `${palette} ${mode}`;
+  themes[key] = { ...themes[key], ...vars };
 }
 
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -58,6 +62,16 @@ for (const [name, v] of Object.entries(themes)) {
     const r = ratio(rgb(v[fg]), back);
     if (r < min) {
       console.log(`${name}: ${fg} on ${bg}${alpha ? ` tint ${alpha * 100}%` : ""} is ${r.toFixed(2)}:1, needs ${min}:1`);
+      failed++;
+    }
+  }
+  // Gradient primary buttons: accent-fg on every stop and halfway between neighbouring stops.
+  const stops = (v.grad ?? []).map(rgb);
+  const points = stops.flatMap((s, i) => (i ? [tint(stops[i - 1], s, 0.5), s] : [s]));
+  for (const p of points) {
+    const r = ratio(rgb(v["accent-fg"]), p);
+    if (r < min) {
+      console.log(`${name}: accent-fg on gradient rgb(${p}) is ${r.toFixed(2)}:1, needs ${min}:1`);
       failed++;
     }
   }

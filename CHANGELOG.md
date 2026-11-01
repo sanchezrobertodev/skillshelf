@@ -6,6 +6,11 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+### Changed
+
+- A new look for the default Workbench theme: violet with a violet-to-teal gradient on main buttons, a soft glow behind the window, and frosted cards. The other themes keep their flat style.
+- The interface font is now Geist, and cards have rounder corners, in every theme.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
