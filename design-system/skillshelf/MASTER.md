@@ -1,233 +1,89 @@
 # Design System Master File
 
-> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
-> If that file exists, its rules **override** this Master file.
-> If not, strictly follow the rules below.
+> **LOGIC:** When building a specific page, first check `design-system/skillshelf/pages/[page-name].md`.
+> If that file exists, its rules **override** this Master file. If not, follow the rules below.
 
 ---
 
 **Project:** Skillshelf
-**Generated:** 2026-10-16 17:35:48
-**Category:** Developer Tool / IDE
-**Design Dials:** Motion 3/10 (Subtle) | Density 8/10 (Dense / Dashboard)
+**Direction:** Workbench (chosen 2026-10-31, replaces the v0.1 "code dark + run green" dashboard)
+**Source:** ui-ux-pro-max: *Productivity Tool* palette (teal focus + action orange), *Minimalism & Swiss Style* structure, IBM Plex type. Colours adjusted so every text pair passes WCAG AA.
+**Dials:** Variance 3 (calm, balanced) · Motion 2 (subtle) · Density 7 (dense list, roomy chrome)
 
 ---
 
-## Global Rules
+## Principles
 
-### Color Palette
+- **A tinted canvas with floating white cards.** The window background is a soft teal-grey. Content (the list, details, overview tiles, the queue) sits on white cards with a soft shadow. In dark mode, cards get a hairline border instead, because shadows don't read on dark.
+- **Teal is for action and place.** It marks primary buttons, the active rail item, links and focus.
+- **Orange means "update".** Use it only for update status, update buttons and update risk flags, so a pending update is the one warm thing on screen.
+- **Status is never colour alone.** Every chip has an icon and text. Every chart has a text alternative (`role="img"` plus `aria-label`).
+- **Components use semantic tokens only** (`bg-surface`, `text-muted`, `bg-warn`…), never raw hex.
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#1E293B` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#334155` | `--color-secondary` |
-| On Secondary | `#FFFFFF` | `--color-on-secondary` |
-| Accent/CTA | `#22C55E` | `--color-accent` |
-| On Accent/CTA | `#0F172A` | `--color-on-accent` |
-| Background | `#0F172A` | `--color-background` |
-| Foreground | `#F8FAFC` | `--color-foreground` |
-| Card | `#1B2336` | `--color-card` |
-| Card Foreground | `#F8FAFC` | `--color-card-foreground` |
-| Muted | `#272F42` | `--color-muted` |
-| Muted Foreground | `#94A3B8` | `--color-muted-foreground` |
-| Border | `#475569` | `--color-border` |
-| Destructive | `#EF4444` | `--color-destructive` |
-| On Destructive | `#000000` | `--color-on-destructive` |
-| Ring | `#FFFFFF` | `--color-ring` |
+## Tokens (`src/index.css`)
 
-**Color Notes:** Code dark + run green
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--bg` | `#F2F7F7` | `#0A1413` | Window canvas |
+| `--surface` | `#FFFFFF` | `#0F1D1C` | Cards, rail, dialogs |
+| `--surface-2` | `#E8F1F1` | `#152625` | Wells, code, skeletons |
+| `--surface-hover` | `#E0ECEB` | `#1A2E2C` | Hover fill |
+| `--border` / `--border-strong` | `#D3E3E2` / `#B9D0CE` | `#1F3533` / `#2C4744` | Dividers / control outlines |
+| `--card-border` | transparent | `#1F3533` | Card edge |
+| `--fg` | `#10302D` | `#E6F2F1` | Text |
+| `--muted` | `#4B5F5D` | `#93AFAC` | Secondary text (≥5.9:1 on every surface) |
+| `--accent` (+`-hover`, `-fg`) | `#0F766E` / `#FFFFFF` | `#2DD4BF` / `#04211E` | Primary action, active, links, focus |
+| `--warn` (+`-hover`, `-fg`) | `#B43C0A` / `#FFFFFF` | `#FB923C` / `#1C0A02` | Updates only |
+| `--danger` | `#B91C1C` | `#F87171` | Destructive, failures |
+| `--info` | `#3B5B7A` | `#93B4D4` | Managed, neutral info |
+| `--nav-active` / `-fg` | `#D5ECE9` / `#0B5A54` | `#163733` / `#5EEAD4` | Active rail item |
+| `--card-shadow` | soft teal-tinted | deep black | Cards |
 
-### Typography
+Contrast was checked with a script: text on surfaces is 5.9–16:1, button text 5.2–9.1:1, and chip text on its own 10–12% tint is 4.8–7.7:1.
 
-- **Heading Font:** JetBrains Mono
-- **Body Font:** IBM Plex Sans
-- **Mood:** code, developer, technical, precise, functional, hacker
-- **Google Fonts:** [JetBrains Mono + IBM Plex Sans](https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap)
+## Type
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+- **UI:** IBM Plex Sans, 14px base, 13px in dense rows, 11px uppercase for section labels (tracking 0.06em).
+- **Code, versions, ids, paths, token counts:** JetBrains Mono, 11–12px. JetBrains Mono was already bundled, so it stays instead of Plex Mono.
+- Headings are semibold with slight negative tracking. Page title 18px.
+
+## Shape and spacing
+
+- Radius: cards 12px (`rounded-xl`), controls 8px (`rounded-lg`), chips fully rounded.
+- Page gutter 20px. Gaps between cards 12px. Card padding 16px (lists use 16px side padding per row).
+- Rail 80px: icon (20px) above an 11px label. The active item uses the nav-active fill.
+
+## Layout
+
+```
+┌────┬──────────────────────────────────────────────────────────────┐
+│Rail│ Page title · status            [search]  [Check now] [Review]│
+│    │ (banners: rounded strips, 20px gutter)                       │
+│ OV │ ┌filters┐ ┌──────── list card ───────┐ ┌── details card ──┐ │
+│ LIB│ │ on bg │ │ header row               │ │                  │ │
+│ CU │ │       │ │ rows…                    │ │                  │ │
+│ MCP│ └───────┘ └──────────────────────────┘ └──────────────────┘ │
+│ ☾ ⚙│ ┌──────────────── queue card (when jobs exist) ───────────┐ │
+└────┴──────────────────────────────────────────────────────────────┘
 ```
 
-### Spacing Variables
+- Below 1240px wide, the details card overlays the list instead of sitting beside it.
+- Minimum window 960×600.
 
-*Density: 8/10 — Dense / Dashboard*
+## Components
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `2px` / `0.125rem` | Tight gaps |
-| `--space-sm` | `4px` / `0.25rem` | Icon gaps, inline spacing |
-| `--space-md` | `8px` / `0.5rem` | Standard padding |
-| `--space-lg` | `12px` / `0.75rem` | Section padding |
-| `--space-xl` | `16px` / `1rem` | Large gaps |
-| `--space-2xl` | `24px` / `1.5rem` | Section margins |
-| `--space-3xl` | `32px` / `2rem` | Hero padding |
-
-### Shadow Depths
-
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
-
----
-
-## Component Specs
-
-### Buttons
-
-```css
-/* Primary Button */
-.btn-primary {
-  background: #22C55E;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #1E293B;
-  border: 2px solid #1E293B;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #0F172A;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #1E293B;
-  outline: none;
-  box-shadow: 0 0 0 3px #1E293B20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
-
-## Style Guidelines
-
-**Style:** Dark Mode (OLED)
-
-**Keywords:** Dark theme, low light, high contrast, deep black, midnight blue, eye-friendly, OLED, night mode, power efficient
-
-**Best For:** Night-mode apps, coding platforms, entertainment, eye-strain prevention, OLED devices, low-light
-
-**Key Effects:** Minimal glow (text-shadow: 0 0 10px), dark-to-light transitions, low white emission, high readability, visible focus
-
-### Page Pattern
-
-**Pattern Name:** FAQ/Documentation Landing
-
-- **Conversion Strategy:** Reduce support tickets. Track search analytics. Show related articles. Contact escalation path.
-- **CTA Placement:** Search bar prominent + Contact CTA for unresolved questions
-- **Section Order:** Hero with search bar > Popular categories > FAQ accordion > Contact/support CTA
-
----
+- **Buttons:** `primary` (teal), `update` (orange, for update actions only), `secondary` (white with an outline), `ghost`, `danger` (outline). Heights 36 and 32.
+- **Status chip:** icon + label, tinted background, 1px tinted border.
+- **Charts:** inline SVG sparklines and bars in `--accent`. Each has a text alternative such as "41 uses in the last 30 days".
+- **Dialogs:** a card on a teal-tinted scrim. Focus is trapped and returns to where it was. Escape closes.
 
 ## Motion
 
-**Scroll Reveal** (Subtle) — Trigger: scroll (viewport enter) | Duration: 300-400ms | Easing: `power1.out`
+150–200ms colour and opacity transitions only. Nothing moves on hover. `prefers-reduced-motion` turns transitions off.
 
-```js
-gsap.from(el, { opacity: 0, y: 12, duration: 0.35, ease: 'power1.out', scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none reverse' } });
-```
+## Anti-patterns
 
-**Framework notes:** Requires the ScrollTrigger plugin registered once via gsap.registerPlugin(ScrollTrigger); Use matchMedia('(prefers-reduced-motion: reduce)') to skip non-essential motion and render the final state immediately
-
-- ✅ Keep the y offset small (8-16px) so it reads as a fade, not a slide
-- ❌ Don't reveal below-the-fold content needed for SEO/crawlers as invisible-by-default without a no-JS fallback
-- ⚡ toggleActions 'play none none reverse' avoids re-triggering on every scroll direction change
-
----
-
-## Anti-Patterns (Do NOT Use)
-
-- ❌ Light mode default
-- ❌ Slow performance
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- Orange anywhere that isn't about an update.
+- Colour-only status, or icon-only buttons without `aria-label`.
+- Raw hex in components.
+- Shadows in dark mode instead of borders.

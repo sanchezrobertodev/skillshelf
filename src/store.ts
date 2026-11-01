@@ -4,6 +4,7 @@ import { applyTheme, emptyFilters, loadPrefs, savePrefs, type Filters, type Pref
 import type { ActionRequest, Item, Job, JobEvent, Settings } from "./types";
 
 export type Busy = "idle" | "scanning" | "checking";
+export type Screen = "overview" | "library" | "cleanup" | "mcp";
 
 export type Confirmation =
   | { type: "update"; items: Item[] }
@@ -27,6 +28,7 @@ interface State extends Prefs {
   confirmation: Confirmation | null;
   settings: Settings;
   settingsOpen: boolean;
+  screen: Screen;
 
   init: () => Promise<void>;
   refresh: (opts?: { check?: boolean }) => Promise<void>;
@@ -48,6 +50,7 @@ interface State extends Prefs {
   dismissRestart: () => void;
   dismissWarnings: () => void;
   setSettingsOpen: (open: boolean) => void;
+  setScreen: (screen: Screen) => void;
   saveSettings: (s: Settings) => Promise<void>;
 }
 
@@ -79,6 +82,7 @@ export const useStore = create<State>((set, get) => {
     confirmation: null,
     settings: { projects: [], autoCheck: true },
     settingsOpen: false,
+    screen: "library",
 
     init: async () => {
       try {
@@ -175,7 +179,8 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
-    setQuery: (query) => set({ query }),
+    // Searching always shows the results, wherever you typed.
+    setQuery: (query) => set({ query, screen: "library" }),
     setFilters: (f) => {
       set((s) => ({ filters: { ...s.filters, ...f } }));
       persist();
@@ -212,6 +217,7 @@ export const useStore = create<State>((set, get) => {
     dismissRestart: () => set({ restartNeeded: false }),
     dismissWarnings: () => set({ warnings: [] }),
     setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+    setScreen: (screen) => set({ screen }),
     saveSettings: async (settings) => {
       const projectsChanged = settings.projects.join("\n") !== get().settings.projects.join("\n");
       await api.saveSettings(settings);

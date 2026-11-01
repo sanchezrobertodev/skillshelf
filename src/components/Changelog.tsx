@@ -1,102 +1,15 @@
 import clsx from "clsx";
 import { ChevronRight, ExternalLink, GitCommitHorizontal, History, Info, LoaderCircle, RotateCw } from "lucide-react";
-import { Fragment, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { api, errorText } from "../api";
 import { isEmpty, useChangelog } from "../lib/changelog";
 import { fullDate, relativeTime } from "../lib/format";
 import type { Changelog, ChangelogSection, Item } from "../types";
+import { Link, Markdown, type OpenLink } from "./Markdown";
 import { Button } from "./ui";
 
 const COMMITS_SHOWN = 8;
 const SECTIONS_SHOWN = 3;
-
-type OpenLink = (url: string) => void;
-
-function Link({ url, onOpen, className, children }: { url: string; onOpen: OpenLink; className?: string; children: ReactNode }) {
-  return (
-    <a
-      href={url}
-      title={url}
-      onClick={(e) => {
-        e.preventDefault();
-        onOpen(url);
-      }}
-      className={clsx("cursor-pointer underline-offset-2 transition-colors duration-150 hover:underline", className)}
-    >
-      {children}
-    </a>
-  );
-}
-
-/** `code`, **bold** and [links](https://…) inside one line of a release note. */
-function Inline({ text, onOpen }: { text: string; onOpen: OpenLink }) {
-  const parts = text.split(/(\[[^\]]+\]\(https:\/\/[^)\s]+\)|`[^`]+`|\*\*[^*]+\*\*)/g);
-  return (
-    <>
-      {parts.map((p, i) => {
-        const link = /^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/.exec(p);
-        if (link)
-          return (
-            <Link key={i} url={link[2]} onOpen={onOpen} className="text-info">
-              {link[1]}
-            </Link>
-          );
-        if (/^`[^`]+`$/.test(p))
-          return (
-            <code key={i} className="rounded bg-surface-2 px-1 font-mono text-[11px]">
-              {p.slice(1, -1)}
-            </code>
-          );
-        if (/^\*\*[^*]+\*\*$/.test(p)) return <strong key={i}>{p.slice(2, -2)}</strong>;
-        return <Fragment key={i}>{p}</Fragment>;
-      })}
-    </>
-  );
-}
-
-/** Just enough markdown for changelogs: headings, bullet lists and paragraphs. */
-function Notes({ body, onOpen }: { body: string; onOpen: OpenLink }) {
-  const blocks: ReactNode[] = [];
-  let bullets: string[] = [];
-  const flush = () => {
-    if (!bullets.length) return;
-    const list = bullets;
-    bullets = [];
-    blocks.push(
-      <ul key={blocks.length} className="my-1 list-disc space-y-0.5 pl-4">
-        {list.map((b, i) => (
-          <li key={i}>
-            <Inline text={b} onOpen={onOpen} />
-          </li>
-        ))}
-      </ul>,
-    );
-  };
-  for (const raw of body.split("\n")) {
-    const line = raw.trim();
-    const bullet = /^[-*+]\s+(.*)$/.exec(line);
-    const heading = /^#{1,6}\s+(.*)$/.exec(line);
-    if (bullet) {
-      bullets.push(bullet[1]);
-      continue;
-    }
-    flush();
-    if (!line || line.startsWith("```")) continue;
-    blocks.push(
-      heading ? (
-        <p key={blocks.length} className="mt-2 text-[11px] font-semibold tracking-wider text-muted uppercase first:mt-0">
-          {heading[1]}
-        </p>
-      ) : (
-        <p key={blocks.length} className="my-1">
-          <Inline text={line} onOpen={onOpen} />
-        </p>
-      ),
-    );
-  }
-  flush();
-  return <div className="text-xs leading-relaxed break-words">{blocks}</div>;
-}
 
 function Releases({ sections, label, onOpen }: { sections: ChangelogSection[]; label: string | null; onOpen: OpenLink }) {
   const [all, setAll] = useState(false);
@@ -114,7 +27,7 @@ function Releases({ sections, label, onOpen }: { sections: ChangelogSection[]; l
               <span className="min-w-0 truncate font-mono text-xs">{s.title}</span>
             </summary>
             <div className="px-3 pt-0.5 pb-2.5">
-              {s.body ? <Notes body={s.body} onOpen={onOpen} /> : <p className="text-xs text-muted">No notes for this release.</p>}
+              {s.body ? <Markdown text={s.body} onOpen={onOpen} className="text-xs" /> : <p className="text-xs text-muted">No notes for this release.</p>}
             </div>
           </details>
         ))}

@@ -14,6 +14,7 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ### Changed
 
+- New look ("Workbench"): a navigation rail, a soft tinted window with the list and details on cards, teal for actions and orange only for updates. Light and dark themes both meet WCAG AA contrast.
 - Updates now ask for confirmation first, with a short summary of what's new for each item.
 - Uninstalling a plugin keeps its saved data (settings, caches, downloads) unless you tick **Also delete saved data** in the confirmation. The option only appears when the plugin has data. Before, the data was always deleted.
 

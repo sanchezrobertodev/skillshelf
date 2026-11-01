@@ -2,6 +2,7 @@ import { CircleAlert, CircleArrowUp, CircleCheck, LoaderCircle, RefreshCw, X } f
 import type { ReactNode } from "react";
 import { useAppUpdate } from "../appUpdate";
 import type { DownloadProgress } from "../types";
+import { Markdown } from "./Markdown";
 import { Button, IconButton, Modal } from "./ui";
 
 function percent(p: DownloadProgress | null): number | null {
@@ -35,68 +36,8 @@ function ProgressBar({ progress }: { progress: DownloadProgress | null }) {
   );
 }
 
-/** `code` and **bold**; links and other Markdown show as plain text. */
-function inline(text: string): ReactNode[] {
-  return text
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
-    .map((part, i) =>
-      part.startsWith("`") && part.endsWith("`") && part.length > 1 ? (
-        <code key={i} className="rounded bg-surface-2 px-1 font-mono text-[12px]">
-          {part.slice(1, -1)}
-        </code>
-      ) : part.startsWith("**") && part.endsWith("**") && part.length > 3 ? (
-        <strong key={i}>{part.slice(2, -2)}</strong>
-      ) : (
-        part
-      ),
-    );
-}
-
-/** Renders a Keep a Changelog section: headings, bullet lists and paragraphs. */
 export function ReleaseNotes({ notes }: { notes: string }) {
-  const blocks: ReactNode[] = [];
-  let list: string[] = [];
-  const flush = () => {
-    if (!list.length) return;
-    blocks.push(
-      <ul key={blocks.length} className="mb-3 list-disc space-y-1 pl-5">
-        {list.map((l, i) => (
-          <li key={i}>{inline(l)}</li>
-        ))}
-      </ul>,
-    );
-    list = [];
-  };
-  for (const raw of notes.split(/\r?\n/)) {
-    const line = raw.trim();
-    const bullet = /^[-*]\s+(.*)$/.exec(line);
-    const heading = /^#{1,6}\s+(.*)$/.exec(line);
-    if (bullet) {
-      list.push(bullet[1]);
-      continue;
-    }
-    if (line && list.length && /^\s+/.test(raw)) {
-      list[list.length - 1] += ` ${line}`;
-      continue;
-    }
-    flush();
-    if (heading) {
-      blocks.push(
-        <h3 key={blocks.length} className="mb-1.5 text-[13px] font-semibold">
-          {inline(heading[1])}
-        </h3>,
-      );
-    } else if (line) {
-      blocks.push(
-        <p key={blocks.length} className="mb-3">
-          {inline(line)}
-        </p>,
-      );
-    }
-  }
-  flush();
-  return <div className="text-[13px] leading-relaxed">{blocks}</div>;
+  return <Markdown text={notes} className="text-[13px]" />;
 }
 
 /** Non-blocking strip under the toolbar: update found, download progress, or an install error. */
@@ -105,7 +46,7 @@ export function AppUpdateBanner() {
 
   if (phase === "installing") {
     return (
-      <div role="status" className="flex items-center gap-3 border-b border-accent/30 bg-accent/10 px-4 py-2 text-[13px]">
+      <div role="status" className="mx-5 mb-3 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-[13px]">
         <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin text-accent" />
         <span className="shrink-0 font-medium">Updating to Skillshelf {update?.version}</span>
         <div className="max-w-64 min-w-24 flex-1">
@@ -118,7 +59,7 @@ export function AppUpdateBanner() {
 
   if (phase === "error" && installFailed) {
     return (
-      <div role="alert" className="flex items-center gap-2 border-b border-danger/40 bg-danger/10 px-4 py-2 text-[13px]">
+      <div role="alert" className="mx-5 mb-3 flex items-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[13px]">
         <CircleAlert aria-hidden className="size-4 shrink-0 text-danger" />
         <span className="min-w-0 flex-1">
           Couldn't install Skillshelf {update?.version}: {error}
@@ -136,7 +77,7 @@ export function AppUpdateBanner() {
 
   if (phase !== "available" || !update || dismissed) return null;
   return (
-    <div role="status" className="flex items-center gap-2 border-b border-accent/30 bg-accent/10 px-4 py-1.5 text-[13px]">
+    <div role="status" className="mx-5 mb-3 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1.5 text-[13px]">
       <CircleArrowUp aria-hidden className="size-4 shrink-0 text-accent" />
       <span className="min-w-0 flex-1 truncate">
         <span className="font-medium">Skillshelf {update.version} is available.</span>{" "}

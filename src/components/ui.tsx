@@ -16,7 +16,10 @@ import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from "re
 import { statusLabel } from "../lib/format";
 import type { Kind, Status } from "../types";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "update" | "secondary" | "ghost" | "danger";
+
+/** A floating surface on the tinted canvas: lists, panels, overview tiles. */
+export const card = "rounded-xl border border-card-border bg-surface shadow-card";
 
 export function Button({
   variant = "secondary",
@@ -29,10 +32,11 @@ export function Button({
     <button
       type="button"
       className={clsx(
-        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap transition-colors duration-150",
+        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-colors duration-150",
         "disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" ? "h-8 px-2.5 text-[13px]" : "h-9 px-3.5 text-sm",
         variant === "primary" && "bg-accent text-accent-fg hover:enabled:bg-accent-hover",
+        variant === "update" && "bg-warn text-warn-fg hover:enabled:bg-warn-hover",
         variant === "secondary" && "border border-border-strong bg-surface text-fg hover:enabled:bg-surface-hover",
         variant === "ghost" && "text-fg hover:enabled:bg-surface-hover",
         variant === "danger" && "border border-danger/50 bg-surface text-danger hover:enabled:bg-danger/10",
@@ -57,7 +61,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={clsx(
-        "inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-fg disabled:opacity-50",
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-fg disabled:opacity-50",
         className,
       )}
       {...rest}
@@ -191,7 +195,7 @@ export function Modal({
         aria-labelledby="modal-title"
         onMouseDown={(e) => e.stopPropagation()}
         className={clsx(
-          "flex max-h-[85vh] w-full flex-col rounded-lg border border-border-strong bg-surface shadow-2xl",
+          "flex max-h-[85vh] w-full flex-col rounded-xl border border-card-border bg-surface shadow-2xl",
           wide ? "max-w-2xl" : "max-w-lg",
         )}
       >

@@ -1,25 +1,21 @@
-import { Download, LoaderCircle, Monitor, Moon, RefreshCw, Search, Settings, Sun, X } from "lucide-react";
+import { Download, LoaderCircle, RefreshCw, Search, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { relativeTime } from "../lib/format";
-import type { Theme } from "../lib/prefs";
-import { useStore } from "../store";
+import { type Screen, useStore } from "../store";
 import { Button, IconButton, Kbd } from "./ui";
 
-const nextTheme: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
-const themeIcon = { system: Monitor, light: Sun, dark: Moon };
+const titles: Record<Screen, string> = { overview: "Overview", library: "Library", cleanup: "Clean Up", mcp: "MCP Servers" };
 
 export function Toolbar() {
+  const screen = useStore((s) => s.screen);
   const query = useStore((s) => s.query);
   const setQuery = useStore((s) => s.setQuery);
   const busy = useStore((s) => s.busy);
   const checkedAt = useStore((s) => s.checkedAt);
   const items = useStore((s) => s.items);
-  const theme = useStore((s) => s.theme);
-  const setTheme = useStore((s) => s.setTheme);
   const checkUpdates = useStore((s) => s.checkUpdates);
   const refresh = useStore((s) => s.refresh);
   const confirm = useStore((s) => s.confirm);
-  const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const search = useRef<HTMLInputElement>(null);
 
   const updatable = items.filter((i) => i.status === "updateAvailable");
@@ -40,7 +36,6 @@ export function Toolbar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [refresh]);
 
-  const ThemeIcon = themeIcon[theme];
   const status =
     busy === "scanning"
       ? "Scanning installed items…"
@@ -51,18 +46,13 @@ export function Toolbar() {
           : "Not checked yet";
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
-      <div className="flex w-[200px] shrink-0 items-center gap-2">
-        <svg aria-hidden viewBox="0 0 24 24" className="size-6 text-accent">
-          <rect x="3" y="4" width="4" height="16" rx="1" fill="currentColor" />
-          <rect x="9" y="7" width="4" height="13" rx="1" fill="currentColor" opacity="0.7" />
-          <rect x="15.5" y="5" width="4" height="15" rx="1" fill="currentColor" opacity="0.45" transform="rotate(-12 17.5 12.5)" />
-          <rect x="2" y="20" width="20" height="1.6" rx="0.8" fill="currentColor" />
-        </svg>
-        <span className="text-[15px] font-semibold tracking-tight">Skillshelf</span>
-      </div>
+    <header className="flex h-16 shrink-0 items-center gap-3 px-5">
+      <h1 className="text-lg font-semibold tracking-tight">{titles[screen]}</h1>
+      <span className="hidden text-xs text-muted lg:inline" aria-live="polite">
+        {status}
+      </span>
 
-      <div className="relative max-w-xl min-w-0 flex-1">
+      <div className="relative ml-auto w-full max-w-sm min-w-0">
         <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
         <input
           ref={search}
@@ -74,7 +64,7 @@ export function Toolbar() {
           }}
           placeholder="Search skills, plugins, commands…"
           aria-label="Search"
-          className="h-9 w-full rounded-md border border-border-strong bg-bg pr-16 pl-9 text-sm placeholder:text-muted focus-visible:outline-2"
+          className="h-9 w-full rounded-lg border border-border bg-surface pr-16 pl-9 text-sm shadow-card placeholder:text-muted focus-visible:outline-2"
         />
         <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
           {query ? (
@@ -87,33 +77,18 @@ export function Toolbar() {
         </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
-        <span className="hidden text-xs text-muted lg:inline" aria-live="polite">
-          {status}
-        </span>
-        <Button onClick={() => void checkUpdates()} disabled={busy !== "idle"} title="Refresh catalogs and compare versions">
-          {busy === "checking" ? (
-            <LoaderCircle aria-hidden className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw aria-hidden className="size-4" />
-          )}
-          Check for updates
-        </Button>
-        <Button
-          variant="primary"
-          disabled={!updatable.length}
-          onClick={() => confirm({ type: "update", items: updatable })}
-        >
-          <Download aria-hidden className="size-4" />
-          Update all{updatable.length ? ` (${updatable.length})` : ""}
-        </Button>
-        <IconButton label={`Theme: ${theme} (switch to ${nextTheme[theme]})`} onClick={() => setTheme(nextTheme[theme])}>
-          <ThemeIcon className="size-4" />
-        </IconButton>
-        <IconButton label="Settings" onClick={() => setSettingsOpen(true)}>
-          <Settings className="size-4" />
-        </IconButton>
-      </div>
+      <Button onClick={() => void checkUpdates()} disabled={busy !== "idle"} title="Refresh catalogs and compare versions">
+        {busy === "checking" ? (
+          <LoaderCircle aria-hidden className="size-4 animate-spin" />
+        ) : (
+          <RefreshCw aria-hidden className="size-4" />
+        )}
+        Check now
+      </Button>
+      <Button variant="update" disabled={!updatable.length} onClick={() => confirm({ type: "update", items: updatable })}>
+        <Download aria-hidden className="size-4" />
+        {updatable.length ? `Review ${updatable.length} update${updatable.length === 1 ? "" : "s"}` : "No updates"}
+      </Button>
     </header>
   );
 }
