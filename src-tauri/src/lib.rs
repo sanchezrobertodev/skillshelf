@@ -98,7 +98,7 @@ async fn run_actions(
                 item.data_bytes = paths::plugin_data_size(plugin_id);
             }
             let plan = actions::plan(&item, &req);
-            let emit =|state: JobState, line: Option<String>, message: Option<String>, confirm| {
+            let emit = |state: JobState, line: Option<String>, message: Option<String>, confirm| {
                 let _ = app.emit(
                     "job",
                     JobEvent {
