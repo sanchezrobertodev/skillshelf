@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "../i18n";
 import { statusLabel } from "../lib/format";
 import type { Kind, Status } from "../types";
@@ -241,7 +242,8 @@ export function Modal({
     };
   }, []);
 
-  return (
+  // Portalled to <body>: a frosted .card (backdrop-filter) would otherwise contain this fixed overlay.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onMouseDown={onClose}>
       <div
         ref={panel}
@@ -265,6 +267,7 @@ export function Modal({
         <div className="overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

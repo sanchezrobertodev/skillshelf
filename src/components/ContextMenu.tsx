@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { Download, ExternalLink, FolderOpen, Power, PowerOff, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, errorText } from "../api";
 import { type TKey, useT } from "../i18n";
 import { canReinstall, canToggle, canUninstall } from "../lib/format";
@@ -91,7 +92,8 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
     e.stopPropagation();
   };
 
-  return (
+  // Portalled to <body> so viewport coordinates hold: the list's frosted .card (backdrop-filter) would contain and clip it.
+  return createPortal(
     <div
       ref={menu}
       role="menu"
@@ -121,6 +123,7 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
           {e.label}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
