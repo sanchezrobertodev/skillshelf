@@ -49,7 +49,7 @@ impl Text<'_> {
             .fold(s.to_string(), |s, (k, v)| s.replace(&format!("{{{k}}}"), v))
     }
 
-    /// shortcut: `_one` for 1 and `_other` otherwise fits English and Spanish; a language with more plural forms needs the UI to send them chosen.
+    /// shortcut: `_one` for 1 and `_other` otherwise fits the shipped languages (French and Portuguese read fine with `_other` for 0); a language with more plural forms needs the UI to send them chosen.
     fn count(&self, key: &str, n: usize, args: &[(&str, &str)]) -> String {
         let form = if n == 1 { "one" } else { "other" };
         let n = n.to_string();

@@ -6,6 +6,10 @@ import { Fragment, createElement, type ReactNode } from "react";
 import { create } from "zustand";
 import en from "./en.json";
 import es from "./es.json";
+import de from "./de.json";
+import fr from "./fr.json";
+import pt from "./pt.json";
+import ja from "./ja.json";
 
 const base = en;
 type Key = keyof typeof base;
@@ -14,7 +18,14 @@ export type TKey = Key extends infer K ? (K extends `${infer B}_${"one" | "other
 type Params = Record<string, string | number>;
 
 /** Shipped languages, by their own name. Add a JSON file and a line here to add one. */
-export const languages = { en: "English", es: "Español" } as const;
+export const languages = {
+  en: "English",
+  es: "Español",
+  de: "Deutsch",
+  fr: "Français",
+  pt: "Português (Brasil)",
+  ja: "日本語",
+} as const;
 export type Language = keyof typeof languages;
 export type LanguagePref = Language | "system";
 
@@ -22,6 +33,10 @@ export type LanguagePref = Language | "system";
 const dicts: Record<Language, Record<string, string>> = {
   en: base,
   es: es satisfies Record<Key, string>,
+  de: de satisfies Record<Key, string>,
+  fr: fr satisfies Record<Key, string>,
+  pt: pt satisfies Record<Key, string>,
+  ja: ja satisfies Record<Key, string>,
 };
 
 export function resolveLanguage(pref: LanguagePref): Language {

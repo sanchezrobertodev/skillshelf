@@ -6,6 +6,10 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+### Added
+
+- Brazilian Portuguese, German, French and Japanese. Pick one in **Settings → General → Language**, or leave it on System to follow your computer's language. These are first translations, so corrections are welcome.
+
 ### Changed
 
 - The Indigo theme is bluer, so it's easier to tell apart from the violet Workbench.

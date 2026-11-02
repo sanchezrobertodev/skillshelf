@@ -14,7 +14,7 @@ A desktop app for the skills and plugins you've installed for Claude Code. It ru
 - **Check MCP servers**: each server's status, grouped by plugin, with the reason when it can't connect.
 - **Filter, sort and search** by type, status, source, marketplace/repo, on/off state, and Unused, Has issues, Has hooks or Mods. Sort by context cost or uses too. Each filter option shows a count.
 - **Turn plugins on and off**, **uninstall** items (always with a confirmation), and open an item's folder or source repo.
-- **Make it yours** in **Settings**: English or Spanish, light, dark or system mode, five colour themes including high contrast, how often to check, notifications, starting at login, and whether closing the window keeps Skillshelf in the tray.
+- **Make it yours** in **Settings**: English, Spanish, Brazilian Portuguese, German, French or Japanese, light, dark or system mode, five colour themes including high contrast, how often to check, notifications, starting at login, and whether closing the window keeps Skillshelf in the tray.
 
 Closing the window keeps Skillshelf in the tray (menu bar on macOS), so scheduled checks and notifications keep running; **Settings** can make it quit instead. The tray menu lists pending updates and has **Check now**, **Update all** and **Quit**.
 
@@ -140,7 +140,7 @@ npm run typecheck
 npm test               # cargo test (parsers, version logic, git comparisons)
 ```
 
-Before pushing, run `make check`. It runs the typecheck, the theme contrast check (`node scripts/contrast.mjs`), `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`, which is the same work as the CI `test` job plus lint and format checks. The `Makefile` also has `install`, `test`, `lint`, `fmt`, `dev` and `build`.
+Before pushing, run `make check`. It runs the typecheck, the theme contrast check (`node scripts/contrast.mjs`), the translation check (`node scripts/i18n.mjs`), `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`, which is the same work as the CI `test` job plus lint and format checks. The `Makefile` also has `install`, `test`, `lint`, `fmt`, `dev` and `build`.
 
 `npm run dev` in a plain browser reads `src/dev/snapshot.json` when it exists (git-ignored). To create it from your own install:
 

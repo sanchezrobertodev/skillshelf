@@ -3,10 +3,10 @@
 
 CARGO_MANIFEST := --manifest-path src-tauri/Cargo.toml
 
-.PHONY: check install typecheck contrast test lint fmt fmt-check dev build
+.PHONY: check install typecheck contrast i18n test lint fmt fmt-check dev build
 
 ## check: everything CI runs before bundling, plus clippy and rustfmt
-check: typecheck contrast fmt-check lint test
+check: typecheck contrast i18n fmt-check lint test
 
 install:
 	npm ci
@@ -17,6 +17,10 @@ typecheck:
 ## contrast: every theme's text colours meet WCAG contrast
 contrast:
 	node scripts/contrast.mjs
+
+## i18n: every language file has en.json's keys and {placeholders}
+i18n:
+	node scripts/i18n.mjs
 
 test:
 	cargo test $(CARGO_MANIFEST)
