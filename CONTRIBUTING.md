@@ -20,7 +20,7 @@ The browser mode is the quickest way to work on the UI. It reads `src/dev/snapsh
 
 ## Before you open a pull request
 
-Run `make check`. It runs the typecheck, the theme contrast check, `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`. CI runs the typecheck, the contrast check and the tests on every pull request. It also builds the installers on Windows, macOS and Linux when the pull request changes `src-tauri/`, `package.json`, `package-lock.json` or `.github/`.
+Run `make check`. It runs the typecheck with the production frontend build, the theme contrast check, the translation check, `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`. CI runs the same checks except clippy and rustfmt on every pull request. It also builds the installers on Windows, macOS and Linux when the pull request changes `src-tauri/`, `package.json`, `package-lock.json` or `.github/`.
 
 - Keep a pull request to one change, and say in its description how you checked it.
 - Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice. That section becomes the release notes.
@@ -30,7 +30,7 @@ Run `make check`. It runs the typecheck, the theme contrast check, `cargo fmt --
 
 ## Translations
 
-Every piece of text the app shows lives in one JSON file per language in [`src/i18n/`](src/i18n/): `en.json` (English, the source) and `es.json` (Spanish). The tray menu and notifications use the same files.
+Every piece of text the app shows lives in one JSON file per language in [`src/i18n/`](src/i18n/): `en.json` (English, the source) and one file for each translation, such as `es.json` (Spanish). The tray menu and notifications use the same files.
 
 - Keys are flat and grouped by screen: `"settings.language": "Language"`.
 - `{name}` is a value the app fills in. Keep every placeholder from the English text, and don't translate what's inside the braces.

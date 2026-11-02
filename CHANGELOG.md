@@ -6,9 +6,11 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-02
+
 ### Added
 
-- Brazilian Portuguese, German, French and Japanese. Pick one in **Settings → General → Language**, or leave it on System to follow your computer's language. These are first translations, so corrections are welcome.
+- Brazilian Portuguese, German, French and Japanese. If your computer uses one of them, Skillshelf now opens in it, unless you picked a language in **Settings → General → Language**. These are first translations, so corrections are welcome.
 
 ### Changed
 
@@ -16,26 +18,30 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ### Fixed
 
-- Plugins that keep their skills or hooks outside the usual folders (named in their `plugin.json`) now show those skills, hooks and their token cost.
-- The update review now flags hook and MCP files under any name, including ones a plugin's `plugin.json` names.
-- A plugin installed in two projects now updates and uninstalls in the project whose row you picked.
-- Updating Skillshelf from a git clone on Windows works again after the first update, and a working copy of the app stays in place while it builds.
+- Plugins that keep their skills, commands, agents or hooks outside the usual folders (named in their `plugin.json`) now show them and count those skills, commands and agents in their token cost. They get the **Mod** badge if they change Claude Code.
+- A plugin installed in two projects now updates, turns on or off, and uninstalls in the project whose row you picked.
+- Updating Skillshelf from a git clone on Windows no longer fails after the first update, and a working copy of the app stays in place while it builds.
 - Stopping a job, or a job timing out, now also ends the programs it started.
-- An update check no longer runs while updates or uninstalls are in progress; it runs once they finish.
+- An update check and actions such as updates, uninstalls or turning plugins on or off no longer run at the same time. A check waits until the actions finish, and actions you start during a check wait for it to end.
 - Uninstalling something during an update check no longer leaves it in the list.
 - Clicking an action again while it waits no longer queues it twice.
 - **Review updates** in the toolbar counts only updates Skillshelf can install.
-- Versions such as `2.1` are now compared, so those skills show their updates.
-- Skill changelogs use far fewer GitHub requests, so reviewing updates without a GitHub token no longer runs out of requests.
+- Versions such as `2.1` are now compared, so skills and plugins that use them show their updates.
+- Skill changelogs use far fewer GitHub requests, so reviewing updates without a GitHub token runs out of requests much less often.
 - Usage counts no longer count a resumed session's earlier uses again.
 - Settings can no longer be lost when the app closes in the middle of saving them.
 - Program output with characters that aren't UTF-8 no longer stops a job's log.
 - An error shown for one item no longer stays on screen when you open another, and the review sheet starts fresh for a new set of updates.
-- The usage graph names the right busiest day west of UTC.
+- The usage graph names the right busiest day in time zones ahead of or behind UTC.
 
 ### Security
 
 - A marketplace catalog could make the update check run a command on your computer through a crafted repository URL, ref or npm package name. Skillshelf now refuses those values.
+- The update review could miss new or changed hooks and MCP servers. It now also flags any `.json` file in a plugin's `hooks` folder, the hook and MCP files its `plugin.json` names, and `.mcpb` and `.dxt` MCP bundles.
+
+### Notes
+
+- If you run Skillshelf from a git clone on Windows, the update to 0.5.0 still runs the old updater and can fail. If it does, quit Skillshelf, run `git pull --ff-only`, `npm ci` and `npm run tauri build -- --no-bundle` in the clone, then start `src-tauri/target/release/skillshelf.exe`.
 
 ## [0.4.0] - 2026-11-01
 
@@ -117,7 +123,8 @@ First release of Skillshelf, a desktop app for the skills and plugins you've ins
 - Filter, sort and search by type, status, source, marketplace/repo and on/off state.
 - Enable/disable plugins, uninstall items (always with a confirmation), and open an item's folder or source repo.
 
-[Unreleased]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sanchezrobertodev/skillshelf/compare/v0.1.0...v0.2.0
