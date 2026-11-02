@@ -140,16 +140,21 @@ pub fn github_url(repo: &str) -> String {
     format!("https://github.com/{}", repo.trim_end_matches(".git"))
 }
 
-/// `https://github.com/owner/repo.git` → `owner/repo`.
+/// `owner/repo` for GitHub https, ssh and scp-style URLs.
 pub fn github_repo_from_url(url: &str) -> Option<String> {
-    let rest = url
-        .strip_prefix("https://github.com/")
-        .or_else(|| url.strip_prefix("http://github.com/"))
-        .or_else(|| url.strip_prefix("git@github.com:"))?;
-    let mut parts = rest.trim_end_matches('/').trim_end_matches(".git").split('/');
+    let url = url.trim();
+    let rest = [
+        "https://github.com/",
+        "http://github.com/",
+        "ssh://git@github.com/",
+        "git@github.com:",
+    ]
+    .iter()
+    .find_map(|p| url.strip_prefix(p))?;
+    let mut parts = rest.split('/');
     let owner = parts.next().filter(|s| !s.is_empty())?;
-    let repo = parts.next().filter(|s| !s.is_empty())?;
-    Some(format!("{owner}/{repo}"))
+    let repo = parts.next()?.trim_end_matches(".git");
+    (!repo.is_empty()).then(|| format!("{owner}/{repo}"))
 }
 
 #[cfg(test)]
@@ -216,10 +221,18 @@ mod tests {
 
     #[test]
     fn github_repo_parsing() {
-        assert_eq!(
-            github_repo_from_url("https://github.com/heygen-com/hyperframes.git").as_deref(),
-            Some("heygen-com/hyperframes")
-        );
+        for url in [
+            "https://github.com/o/r.git",
+            "https://github.com/o/r",
+            "https://github.com/o/r/",
+            "git@github.com:o/r.git",
+            "ssh://git@github.com/o/r",
+            " https://github.com/o/r.git\n",
+            "https://github.com/o/r/tree/main/x",
+        ] {
+            assert_eq!(github_repo_from_url(url).as_deref(), Some("o/r"), "{url}");
+        }
         assert_eq!(github_repo_from_url("https://gitlab.com/a/b"), None);
+        assert_eq!(github_repo_from_url("https://github.com/o/"), None);
     }
 }

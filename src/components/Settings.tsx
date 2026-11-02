@@ -1,4 +1,3 @@
-import clsx from "clsx";
 import {
   Check,
   ExternalLink,
@@ -15,6 +14,7 @@ import {
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { api, errorText, type ProjectPage } from "../api";
 import { type LanguagePref, languages, resolveLanguage, type TKey, tx, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { type Palette, palettes, type Theme } from "../lib/prefs";
 import { useStore } from "../store";
 import type { Environment, Settings as SettingsData } from "../types";
@@ -27,7 +27,7 @@ const selectCls =
 function Section({ title, icon: Icon, children }: { title: string; icon: typeof Info; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={clsx(card, "px-5 py-4")}>
+    <section aria-labelledby={id} className={cx(card, "px-5 py-4")}>
       <h2 id={id} className="mb-1 flex items-center gap-2 text-[11px] font-semibold tracking-wider text-muted uppercase">
         <Icon aria-hidden className="size-4" />
         {title}
@@ -69,7 +69,7 @@ function ModePicker() {
         return (
           <label
             key={m}
-            className={clsx(
+            className={cx(
               "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring",
               theme === m ? "bg-nav-active font-medium text-nav-active-fg" : "text-muted hover:text-fg",
             )}
@@ -99,7 +99,7 @@ function PalettePicker() {
           <div
             data-palette={p}
             data-theme={dark ? "dark" : "light"}
-            className={clsx(
+            className={cx(
               "rounded-lg border-2 bg-bg p-2 transition-colors duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring",
               palette === p ? "border-accent" : "border-transparent group-hover:border-border-strong",
             )}

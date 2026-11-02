@@ -1,11 +1,11 @@
-import clsx from "clsx";
 import { Building2, FolderSymlink, Hammer, Lock, LoaderCircle, PowerOff, RotateCcw, Trash2, CircleMinus, BrushCleaning } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { api, errorText } from "../api";
 import { t, tx, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { relativeTime, statusLabel } from "../lib/format";
 import { hasHooks, isUnused, shortCount } from "../lib/insights";
-import { useStore } from "../store";
+import { isActive, useStore } from "../store";
 import type { Item } from "../types";
 import { Button, card, KindIcon, Switch } from "./ui";
 
@@ -29,7 +29,7 @@ function Section({
 }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={clsx(card, "shrink-0 overflow-hidden")}>
+    <section aria-labelledby={id} className={cx(card, "shrink-0 overflow-hidden")}>
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 id={id} className="flex items-center gap-2 text-[13px] font-semibold">
@@ -169,7 +169,7 @@ export function CleanUp() {
   const confirm = useStore((s) => s.confirm);
   const jobs = useStore((s) => s.jobs);
   const [error, setError] = useState<string | null>(null);
-  const busy = new Set(Object.values(jobs).filter((j) => j.state === "queued" || j.state === "running").map((j) => j.itemId));
+  const busy = new Set(Object.values(jobs).filter(isActive).map((j) => j.itemId));
 
   const hooks = items.filter((i) => i.kind === "plugin" && hasHooks(i) && i.source !== "synced").sort(byCost);
   const managed = items.filter((i) => i.source === "synced").sort(byCost);

@@ -44,6 +44,7 @@ pub fn clone_dir() -> Option<PathBuf> {
 pub fn remove_old_binary() {
     if let Ok(exe) = std::env::current_exe() {
         let _ = std::fs::remove_file(aside(&exe));
+        let _ = std::fs::remove_file(aside(&twin(&exe)));
     }
 }
 
@@ -51,6 +52,31 @@ fn aside(exe: &Path) -> PathBuf {
     let mut name = exe.file_name().unwrap_or_default().to_os_string();
     name.push(".old");
     exe.with_file_name(name)
+}
+
+/// The copy in `deps/` that cargo hard-links `target/release/<exe>` from.
+fn twin(exe: &Path) -> PathBuf {
+    exe.with_file_name("deps").join(exe.file_name().unwrap_or_default())
+}
+
+/// Moves the running build aside under both its names (Windows can rename a running exe but not
+/// replace it, and the linker writes the `deps/` name) and copies it back, so a working exe stays
+/// in place for the whole build. Records what it moved in `moved`.
+fn set_aside(built: &Path, moved: &mut Vec<PathBuf>) -> Result<(), String> {
+    for exe in [twin(built), built.to_path_buf()] {
+        let old = aside(&exe);
+        // A leftover that can't be removed is the image an earlier update in this session left
+        // running, so `exe` is a newer build the linker may replace.
+        if !exe.exists() || (std::fs::remove_file(&old).is_err() && old.exists()) {
+            continue;
+        }
+        std::fs::rename(&exe, &old).map_err(|e| format!("Couldn't move the running app aside: {e}"))?;
+        moved.push(exe);
+    }
+    if !built.exists() {
+        std::fs::copy(aside(built), built).map_err(|e| format!("Couldn't copy the running app back: {e}"))?;
+    }
+    Ok(())
 }
 
 async fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
@@ -172,8 +198,7 @@ async fn step(
 }
 
 /// Pulls, reinstalls and rebuilds, then returns the new binary to start. When the build would
-/// overwrite the running binary, that binary is moved aside first: Windows can rename a running
-/// exe but not replace it.
+/// overwrite the running binary, that binary is set aside first (see `set_aside`).
 pub async fn update(dir: &Path, mut on_line: impl FnMut(&str)) -> Result<PathBuf, String> {
     let s = status(dir).await?;
     if let Some(why) = s.blocked {
@@ -191,20 +216,25 @@ pub async fn update(dir: &Path, mut on_line: impl FnMut(&str)) -> Result<PathBuf
         .join("release")
         .join(format!("skillshelf{}", std::env::consts::EXE_SUFFIX));
     let running = std::env::current_exe().and_then(|e| e.canonicalize()).ok();
-    let moved = built.exists() && built.canonicalize().ok() == running;
-    if moved {
-        std::fs::rename(&built, aside(&built)).map_err(|e| format!("Couldn't move the running app aside: {e}"))?;
+    let mut moved = Vec::new();
+    let mut result = Ok(());
+    if built.exists() && built.canonicalize().ok() == running {
+        result = set_aside(&built, &mut moved);
     }
-    let result = step(
-        dir,
-        "npm",
-        &["run", "tauri", "build", "--", "--no-bundle"],
-        BUILD,
-        &mut on_line,
-    )
-    .await;
-    if result.is_err() && moved && !built.exists() {
-        let _ = std::fs::rename(aside(&built), &built);
+    if result.is_ok() {
+        result = step(
+            dir,
+            "npm",
+            &["run", "tauri", "build", "--", "--no-bundle"],
+            BUILD,
+            &mut on_line,
+        )
+        .await;
+    }
+    if result.is_err() {
+        for exe in &moved {
+            let _ = std::fs::rename(aside(exe), exe);
+        }
     }
     result.map(|()| built)
 }
@@ -230,6 +260,40 @@ mod tests {
             aside(Path::new("/x/skillshelf.exe")),
             Path::new("/x/skillshelf.exe.old")
         );
+        assert_eq!(
+            twin(Path::new("/x/release/skillshelf.exe")),
+            Path::new("/x/release/deps/skillshelf.exe")
+        );
+    }
+
+    #[test]
+    fn sets_the_running_build_aside_and_keeps_a_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let built = tmp.path().join("skillshelf.exe");
+        std::fs::create_dir(tmp.path().join("deps")).unwrap();
+        std::fs::write(&built, "v1").unwrap();
+        std::fs::hard_link(&built, twin(&built)).unwrap();
+        let mut moved = Vec::new();
+        set_aside(&built, &mut moved).unwrap();
+        assert_eq!(moved, [twin(&built), built.clone()]);
+        assert_eq!(std::fs::read_to_string(&built).unwrap(), "v1");
+        assert!(!twin(&built).exists() && aside(&twin(&built)).exists());
+
+        // The aside file can't be removed (still the running image): the newer build stays put.
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let _running = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0)
+                .open(aside(&built))
+                .unwrap();
+            std::fs::write(&built, "v2").unwrap();
+            let mut moved = Vec::new();
+            set_aside(&built, &mut moved).unwrap();
+            assert!(moved.is_empty());
+            assert_eq!(std::fs::read_to_string(&built).unwrap(), "v2");
+        }
     }
 
     fn sh(dir: &Path, args: &[&str]) {

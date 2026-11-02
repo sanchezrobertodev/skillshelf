@@ -1,7 +1,7 @@
-import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { type TKey, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { countBy, flagTest, matches, type Facet } from "../lib/filter";
 import { sourceHelp, sourceLabel, statusLabel, statusOrder } from "../lib/format";
 import type { Filters, Flag } from "../lib/prefs";
@@ -44,7 +44,7 @@ function Group<T extends string>({
             <li key={o.value}>
               <label
                 title={o.hint}
-                className={clsx(
+                className={cx(
                   "flex h-8 items-center gap-2 rounded-md px-2 text-[13px] transition-colors duration-150 hover:bg-surface-hover",
                   on && "bg-surface-2 font-medium",
                 )}
@@ -56,7 +56,7 @@ function Group<T extends string>({
                   className="size-3.5 accent-[var(--accent)]"
                 />
                 <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                <span className={clsx("font-mono text-xs tabular-nums", o.count ? "text-muted" : "text-muted/60")}>
+                <span className={cx("font-mono text-xs tabular-nums", o.count ? "text-muted" : "text-muted/60")}>
                   {o.count}
                 </span>
               </label>
@@ -71,7 +71,7 @@ function Group<T extends string>({
           className="mt-1 flex items-center gap-1 rounded px-2 py-1 text-xs text-muted hover:text-fg"
           aria-expanded={expanded}
         >
-          <ChevronDown aria-hidden className={clsx("size-3.5 transition-transform", expanded && "rotate-180")} />
+          <ChevronDown aria-hidden className={cx("size-3.5 transition-transform", expanded && "rotate-180")} />
           {expanded ? t("filters.showFewer") : t("filters.showAll", { count: options.length })}
         </button>
       )}
@@ -195,7 +195,7 @@ export function FilterSidebar() {
                 role="radio"
                 aria-checked={filters.enabled === v}
                 onClick={() => set({ enabled: v })}
-                className={clsx(
+                className={cx(
                   "h-7 rounded transition-colors duration-150",
                   filters.enabled === v ? "bg-surface-2 font-medium text-fg" : "text-muted hover:text-fg",
                 )}

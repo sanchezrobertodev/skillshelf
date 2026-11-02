@@ -1,6 +1,7 @@
 //! App preferences, stored as JSON in the OS app-config folder.
 
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -55,13 +56,26 @@ impl Settings {
             .unwrap_or_default()
     }
 
-    pub fn save(&self, file: &PathBuf) -> Result<(), String> {
+    pub fn save(&self, file: &Path) -> Result<(), String> {
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(file, json).map_err(|e| format!("could not save settings: {e}"))
+        write_atomic(file, json.as_bytes()).map_err(|e| format!("could not save settings: {e}"))
     }
+}
+
+/// Writes a sibling temp file and renames it over `file` (atomic on Windows and Unix), so a crash
+/// mid-write leaves the old file whole instead of truncated.
+pub fn write_atomic(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = file.with_extension("tmp");
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        // On disk before the rename, or a power cut can still leave an empty file.
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp, file)
 }
 
 #[cfg(test)]
@@ -74,5 +88,15 @@ mod tests {
         assert_eq!((s.projects.len(), s.auto_check), (1, false));
         assert_eq!(s.check_interval, CheckInterval::Daily);
         assert!(s.close_to_tray && s.notifications);
+    }
+
+    #[test]
+    fn atomic_write_replaces_the_file_and_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("settings.json");
+        std::fs::write(&file, "older and longer content").unwrap();
+        write_atomic(&file, b"new").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "new");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 }

@@ -433,6 +433,34 @@ mod tests {
     }
 
     #[test]
+    fn local_skill_uninstall_trashes_only_real_skill_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let uninstall = |path: &std::path::Path| {
+            let mut item = Item::new("skill:a".into(), Kind::Skill, Source::Local, "a".into());
+            item.path = Some(path.display().to_string());
+            plan(&item, &req(Action::Uninstall))
+        };
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        std::fs::write(real.join("SKILL.md"), "---\nname: a\n---\n").unwrap();
+        assert_eq!(uninstall(&real), Ok(Plan::Trash(real.clone())));
+
+        let empty = dir.path().join("empty");
+        std::fs::create_dir(&empty).unwrap();
+        assert!(uninstall(&empty).is_err(), "no SKILL.md");
+
+        let link = dir.path().join("link");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // Without admin rights or Developer Mode, Windows can't make one.
+        #[cfg(windows)]
+        if std::os::windows::fs::symlink_dir(&real, &link).is_err() {
+            return;
+        }
+        assert!(uninstall(&link).is_err(), "a linked folder stays where it is");
+    }
+
+    #[test]
     fn interprets_results() {
         assert!(
             matches!(interpret(Some(0), "{\"message\":\"Updated\"}\n", ""), Finished::Success(Some(m)) if m == "Updated")

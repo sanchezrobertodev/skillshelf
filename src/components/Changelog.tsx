@@ -1,9 +1,9 @@
-import clsx from "clsx";
 import { ChevronRight, ExternalLink, GitCommitHorizontal, History, Info, LoaderCircle, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { api, errorText } from "../api";
 import { tx, useT } from "../i18n";
 import { isEmpty, useChangelog } from "../lib/changelog";
+import { cx } from "../lib/cx";
 import { fullDate, relativeTime } from "../lib/format";
 import type { Changelog, ChangelogSection, Item } from "../types";
 import { Link, Markdown, type OpenLink } from "./Markdown";
@@ -104,7 +104,7 @@ export function ChangelogPanel({ item }: { item: Item }) {
         onClick={() => setOpen(!open)}
         className="-mx-1 mb-1.5 flex items-center gap-1.5 rounded px-1 text-[11px] font-semibold tracking-wider text-muted uppercase transition-colors duration-150 hover:text-fg"
       >
-        <ChevronRight aria-hidden className={clsx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
+        <ChevronRight aria-hidden className={cx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
         <History aria-hidden className="size-3.5" />
         {t("changelog.title")}
       </button>

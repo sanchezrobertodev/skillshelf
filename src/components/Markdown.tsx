@@ -1,5 +1,5 @@
-import clsx from "clsx";
 import { Fragment, type ReactNode } from "react";
+import { cx } from "../lib/cx";
 
 export type OpenLink = (url: string) => void;
 
@@ -12,7 +12,7 @@ export function Link({ url, onOpen, className, children }: { url: string; onOpen
         e.preventDefault();
         onOpen(url);
       }}
-      className={clsx("cursor-pointer underline-offset-2 transition-colors duration-150 hover:underline", className)}
+      className={cx("cursor-pointer underline-offset-2 transition-colors duration-150 hover:underline", className)}
     >
       {children}
     </a>
@@ -116,5 +116,5 @@ export function Markdown({ text, onOpen, className }: { text: string; onOpen?: O
   }
   flush();
   if (code) blocks.push(<pre key={blocks.length} className="my-2 overflow-x-auto rounded-lg bg-surface-2 p-2.5 font-mono text-[0.9em]">{code.join("\n")}</pre>);
-  return <div className={clsx("leading-relaxed break-words", className)}>{blocks}</div>;
+  return <div className={cx("leading-relaxed break-words", className)}>{blocks}</div>;
 }

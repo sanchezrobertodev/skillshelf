@@ -1,9 +1,9 @@
-import clsx from "clsx";
 import { Download, ExternalLink, FolderOpen, Power, PowerOff, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, errorText } from "../api";
 import { type TKey, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { canReinstall, canToggle, canUninstall } from "../lib/format";
 import { updatable, useStore } from "../store";
 import type { Item } from "../types";
@@ -114,7 +114,7 @@ export function ContextMenu({ target, onClose }: { target: MenuTarget; onClose: 
             onClose();
             e.act();
           }}
-          className={clsx(
+          className={cx(
             "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors duration-100 hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-none",
             e.danger && "text-danger",
           )}

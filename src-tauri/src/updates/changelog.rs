@@ -4,17 +4,17 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+use super::http;
 use super::plugins::{self, GIT_TIMEOUT};
 use super::risk::{self, Contents, Risk};
 use super::skills::{Github, skill_folder};
 use crate::model::{CheckInfo, Item, Source};
 use crate::proc;
-use crate::scan::read_json;
+use crate::scan::{github_repo_from_url, read_json};
 
 /// Commits listed at most; the rest are behind `more_url`.
 const MAX_ENTRIES: usize = 50;
@@ -146,7 +146,10 @@ async fn build(item: &Item) -> Result<Changelog, String> {
             skill_path,
             folder_hash,
             ..
-        } => skills_cli(repo.as_deref(), skill_path, folder_hash.as_deref()).await,
+        } => {
+            let installed_at = item.updated_at.as_deref().or(item.installed_at.as_deref());
+            skills_cli(repo.as_deref(), skill_path, folder_hash.as_deref(), installed_at).await
+        }
         CheckInfo::ReleaseManifest { url, version } => {
             release_manifest(url, version.as_deref(), item.latest.as_deref(), item.path.as_deref()).await
         }
@@ -269,7 +272,7 @@ pub async fn marketplace_changes(
             if old.is_none()
                 && let Some(repo) = &web_repo
             {
-                old = raw_file(repo, sha, &at).await.ok().flatten();
+                old = raw_file(&http(), repo, sha, &at).await.ok().flatten();
             }
             after = old.as_deref().and_then(newest_version);
         }
@@ -321,8 +324,8 @@ async fn github_path_commits(repo: &str, base: &str, head: &str, rel: &str) -> R
 
 /// A file at a commit, from raw.githubusercontent.com (not counted against the API rate limit).
 /// `Ok(None)` when the file isn't there; `Err` when it couldn't be fetched.
-async fn raw_file(repo: &str, sha: &str, path: &str) -> Result<Option<String>, String> {
-    let res = http()
+async fn raw_file(client: &reqwest::Client, repo: &str, sha: &str, path: &str) -> Result<Option<String>, String> {
+    let res = client
         .get(format!("https://raw.githubusercontent.com/{repo}/{sha}/{path}"))
         .send()
         .await
@@ -402,7 +405,7 @@ async fn remote_github_repo(repo: &Path) -> Option<String> {
     )
     .await
     .ok()?;
-    out.success().then(|| github_repo(out.stdout.trim())).flatten()
+    out.success().then(|| github_repo_from_url(out.stdout.trim())).flatten()
 }
 
 async fn git_show(repo: &Path, sha: &str, path: &str) -> Option<String> {
@@ -450,7 +453,7 @@ async fn external_changes(src: &Map<String, Value>, git_sha: Option<&str>) -> Re
             .map(|r| format!("https://github.com/{r}.git")),
         _ => src.get("url").and_then(Value::as_str).map(str::to_string),
     };
-    let Some(repo) = url.as_deref().and_then(github_repo) else {
+    let Some(repo) = url.as_deref().and_then(github_repo_from_url) else {
         return Ok(Changelog::unavailable(
             "This plugin's repository isn't on GitHub, so there's no changelog to fetch.",
         ));
@@ -527,33 +530,27 @@ async fn github_contents(
     prefix: &str,
     changed: &[String],
 ) -> Result<Contents, String> {
+    let client = http();
     let mut out = Contents::new();
-    for rel in changed {
+    // plugin.json names hook files, so it's read whenever a JSON file changed, even when it didn't.
+    let manifest = changed.iter().any(|p| p.to_ascii_lowercase().ends_with(".json"))
+        && !changed.iter().any(|p| p == risk::PLUGIN_JSON);
+    for rel in changed
+        .iter()
+        .map(String::as_str)
+        .chain(manifest.then_some(risk::PLUGIN_JSON))
+    {
         let name = rel.rsplit('/').next().unwrap_or(rel).to_ascii_lowercase();
         if name == "plugin.json" || name == "skill.md" {
             let full = format!("{prefix}{rel}");
-            let pair = (raw_file(repo, base, &full).await?, raw_file(repo, head, &full).await?);
-            out.insert(rel.clone(), pair);
+            let pair = (
+                raw_file(&client, repo, base, &full).await?,
+                raw_file(&client, repo, head, &full).await?,
+            );
+            out.insert(rel.to_string(), pair);
         }
     }
     Ok(out)
-}
-
-/// `owner/repo` for GitHub https, ssh and scp-style URLs.
-pub fn github_repo(url: &str) -> Option<String> {
-    let url = url.trim();
-    let rest = [
-        "https://github.com/",
-        "http://github.com/",
-        "ssh://git@github.com/",
-        "git@github.com:",
-    ]
-    .iter()
-    .find_map(|p| url.strip_prefix(p))?;
-    let mut parts = rest.split('/');
-    let owner = parts.next().filter(|s| !s.is_empty())?;
-    let repo = parts.next()?.trim_end_matches(".git");
-    (!repo.is_empty()).then(|| format!("{owner}/{repo}"))
 }
 
 /// Parses a GitHub list of commits (the commits API, or `commits` in a compare response).
@@ -592,8 +589,14 @@ pub fn parse_github_commits(v: &Value) -> Vec<Entry> {
 
 /// Skills installed with the `skills` CLI. The lockfile records the folder's git tree hash, so the
 /// installed commit is the newest commit after which the folder had that hash, and what's new is
-/// every later commit to the folder. One request per commit checked, at most `MAX_HASH_LOOKUPS`.
-async fn skills_cli(repo: Option<&str>, skill_path: &str, folder_hash: Option<&str>) -> Result<Changelog, String> {
+/// every later commit to the folder. One request per commit checked, at most `MAX_HASH_LOOKUPS`;
+/// `installed_at` (the lockfile's time) usually brings that down to one, see `lookup_order`.
+async fn skills_cli(
+    repo: Option<&str>,
+    skill_path: &str,
+    folder_hash: Option<&str>,
+    installed_at: Option<&str>,
+) -> Result<Changelog, String> {
     let Some(repo) = repo else {
         return Ok(Changelog::unavailable(
             "Only skills installed from GitHub have a history Skillshelf can read.",
@@ -628,7 +631,8 @@ async fn skills_cli(repo: Option<&str>, skill_path: &str, folder_hash: Option<&s
         ),
         Some(hash) => {
             let mut found = Ok(None);
-            for (i, c) in commits.iter().enumerate() {
+            for i in lookup_order(&commits, installed_at) {
+                let c = &commits[i];
                 let at = if folder.is_empty() {
                     Ok(list
                         .pointer(&format!("/{i}/commit/tree/sha"))
@@ -683,6 +687,22 @@ async fn skills_cli(repo: Option<&str>, skill_path: &str, folder_hash: Option<&s
         }
     }
     Ok(log)
+}
+
+/// Indices of `commits` in the order to look for the installed one. Commits dated after the install
+/// can't be it, so they go last instead of costing a request each; they stay in, since a committer's
+/// clock can be ahead, and the hash check decides either way.
+/// shortcut: when every listed commit is newer than the install the fallback still checks them all,
+/// pass `until` to the commits API if that case shows up.
+fn lookup_order(commits: &[Entry], installed_at: Option<&str>) -> Vec<usize> {
+    // GitHub and the skills CLI both write UTC (`…Z`); compare to the second.
+    fn utc(s: &str) -> Option<&str> {
+        s.ends_with('Z').then(|| s.get(..19)).flatten()
+    }
+    let install = installed_at.and_then(utc);
+    let after = |e: &Entry| matches!((e.date.as_deref().and_then(utc), install), (Some(d), Some(t)) if d > t);
+    let (later, rest): (Vec<usize>, Vec<usize>) = (0..commits.len()).partition(|&i| after(&commits[i]));
+    rest.into_iter().chain(later).collect()
 }
 
 /// `Ok(None)` when GitHub cut the file list short; `Err` when a request failed.
@@ -803,14 +823,6 @@ pub fn release_notes(text: &str, installed: Option<&str>, latest: Option<&str>) 
         Some(after) => sections_between(text, &after, latest.and_then(parse_version).as_ref()),
         None => Vec::new(),
     }
-}
-
-fn http() -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent(concat!("skillshelf/", env!("CARGO_PKG_VERSION")))
-        .timeout(Duration::from_secs(20))
-        .build()
-        .expect("http client")
 }
 
 // ---------- changelog markdown ----------
@@ -1043,20 +1055,6 @@ mod tests {
     }
 
     #[test]
-    fn github_urls() {
-        for url in [
-            "https://github.com/o/r.git",
-            "https://github.com/o/r",
-            "git@github.com:o/r.git",
-            "ssh://git@github.com/o/r",
-            "https://github.com/o/r/tree/main/x",
-        ] {
-            assert_eq!(github_repo(url).as_deref(), Some("o/r"), "{url}");
-        }
-        assert_eq!(github_repo("https://gitlab.com/o/r.git"), None);
-    }
-
-    #[test]
     fn compare_files_under_a_folder() {
         let v = serde_json::json!({"files": [
             {"filename": "skills/a/SKILL.md"},
@@ -1088,6 +1086,33 @@ mod tests {
                 message: "Title line".into(),
                 url: Some("https://github.com/o/r/commit/abc".into()),
             }]
+        );
+    }
+
+    #[test]
+    fn commits_newer_than_the_install_are_checked_last() {
+        let c = |date: Option<&str>| Entry {
+            sha: "s".into(),
+            date: date.map(str::to_string),
+            message: String::new(),
+            url: None,
+        };
+        let commits = [
+            c(Some("2026-10-20T00:00:00Z")),
+            c(Some("2026-10-12T01:03:39Z")), // same second as the install: still a candidate
+            c(Some("2026-10-12T05:00:00Z")),
+            c(None),
+            c(Some("2026-10-01T00:00:00Z")),
+        ];
+        assert_eq!(
+            lookup_order(&commits, Some("2026-10-12T01:03:39.096Z")),
+            [1, 3, 4, 0, 2]
+        );
+        assert_eq!(lookup_order(&commits, None), [0, 1, 2, 3, 4]);
+        assert_eq!(
+            lookup_order(&commits, Some("2026-10-12T03:03:39+02:00")),
+            [0, 1, 2, 3, 4],
+            "not UTC: don't guess"
         );
     }
 

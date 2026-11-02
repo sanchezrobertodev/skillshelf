@@ -2,7 +2,7 @@ import { Download, LoaderCircle, RefreshCw, Search, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { type TKey, useT } from "../i18n";
 import { relativeTime } from "../lib/format";
-import { type Screen, useStore } from "../store";
+import { type Screen, updatable, useStore } from "../store";
 import { Button, IconButton, Kbd } from "./ui";
 
 const titles: Record<Screen, TKey> = {
@@ -26,7 +26,7 @@ export function Toolbar() {
   const confirm = useStore((s) => s.confirm);
   const search = useRef<HTMLInputElement>(null);
 
-  const updatable = items.filter((i) => i.status === "updateAvailable");
+  const toUpdate = updatable(items);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -93,9 +93,9 @@ export function Toolbar() {
         )}
         {t("toolbar.check")}
       </Button>
-      <Button variant="update" disabled={!updatable.length} onClick={() => confirm({ type: "update", items: updatable })}>
+      <Button variant="update" disabled={!toUpdate.length} onClick={() => confirm({ type: "update", items: toUpdate })}>
         <Download aria-hidden className="size-4" />
-        {updatable.length ? t("toolbar.review", { count: updatable.length }) : t("toolbar.noUpdates")}
+        {toUpdate.length ? t("toolbar.review", { count: toUpdate.length }) : t("toolbar.noUpdates")}
       </Button>
     </header>
   );

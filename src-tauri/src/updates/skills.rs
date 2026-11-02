@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::changelog::{Entry, parse_github_commits};
-use super::{Outcome, semver_newer, short};
+use super::{Outcome, http, semver_newer, short};
 use crate::model::{CheckInfo, Item, Status, Upstream};
 use crate::proc;
 
@@ -36,13 +36,8 @@ pub struct Github {
 
 impl Github {
     pub async fn new() -> Self {
-        let client = reqwest::Client::builder()
-            .user_agent(concat!("skillshelf/", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(20))
-            .build()
-            .expect("http client");
         Github {
-            client,
+            client: http(),
             token: github_token().await,
         }
     }
@@ -331,12 +326,7 @@ pub fn compare_hash(local: Option<&str>, remote: Option<&str>) -> Outcome {
 
 /// Skills that publish their own update manifest (skill-release.json → updateManifestUrl).
 pub async fn check_manifest(url: &str, installed: Option<&str>) -> Outcome {
-    let client = reqwest::Client::builder()
-        .user_agent(concat!("skillshelf/", env!("CARGO_PKG_VERSION")))
-        .timeout(Duration::from_secs(20))
-        .build()
-        .expect("http client");
-    let manifest: Value = match client.get(url).send().await {
+    let manifest: Value = match http().get(url).send().await {
         Ok(r) if r.status().is_success() => match r.json().await {
             Ok(v) => v,
             Err(e) => return Outcome::error(format!("Bad update manifest: {e}")),

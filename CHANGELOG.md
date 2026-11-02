@@ -14,6 +14,29 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 - The Indigo theme is bluer, so it's easier to tell apart from the violet Workbench.
 
+### Fixed
+
+- Plugins that keep their skills or hooks outside the usual folders (named in their `plugin.json`) now show those skills, hooks and their token cost.
+- The update review now flags hook and MCP files under any name, including ones a plugin's `plugin.json` names.
+- A plugin installed in two projects now updates and uninstalls in the project whose row you picked.
+- Updating Skillshelf from a git clone on Windows works again after the first update, and a working copy of the app stays in place while it builds.
+- Stopping a job, or a job timing out, now also ends the programs it started.
+- An update check no longer runs while updates or uninstalls are in progress; it runs once they finish.
+- Uninstalling something during an update check no longer leaves it in the list.
+- Clicking an action again while it waits no longer queues it twice.
+- **Review updates** in the toolbar counts only updates Skillshelf can install.
+- Versions such as `2.1` are now compared, so those skills show their updates.
+- Skill changelogs use far fewer GitHub requests, so reviewing updates without a GitHub token no longer runs out of requests.
+- Usage counts no longer count a resumed session's earlier uses again.
+- Settings can no longer be lost when the app closes in the middle of saving them.
+- Program output with characters that aren't UTF-8 no longer stops a job's log.
+- An error shown for one item no longer stays on screen when you open another, and the review sheet starts fresh for a new set of updates.
+- The usage graph names the right busiest day west of UTC.
+
+### Security
+
+- A marketplace catalog could make the update check run a command on your computer through a crafted repository URL, ref or npm package name. Skillshelf now refuses those values.
+
 ## [0.4.0] - 2026-11-01
 
 ### Changed

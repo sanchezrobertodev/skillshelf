@@ -57,24 +57,61 @@ fn file_name(path: &str) -> String {
 fn by_path(path: &str) -> Option<RiskKind> {
     let lower = path.to_ascii_lowercase();
     let name = file_name(&lower);
-    if name == "hooks.json" {
+    let dirs = || lower.split('/').rev().skip(1);
+    // plugin.json can declare hook files under any name; they live in hooks/ by convention.
+    if name == "hooks.json" || (name.ends_with(".json") && dirs().any(|dir| dir == "hooks")) {
         return Some(RiskKind::Hooks);
     }
-    if name == ".mcp.json" {
+    // plugin.json mcpServers may also name MCPB bundles.
+    if name == ".mcp.json" || name.ends_with(".mcpb") || name.ends_with(".dxt") {
         return Some(RiskKind::Mcp);
     }
-    let in_script_dir = lower
-        .split('/')
-        .rev()
-        .skip(1)
-        .any(|dir| dir == "bin" || dir == "scripts");
+    let in_script_dir = dirs().any(|dir| dir == "bin" || dir == "scripts");
     let ext = name.rsplit_once('.').map(|(_, e)| e);
     (in_script_dir || ext.is_some_and(|e| SCRIPT_EXTENSIONS.contains(&e))).then_some(RiskKind::Scripts)
 }
 
+/// Where a plugin's manifest lives, relative to the plugin folder.
+// shortcut: a manifest committed under another case (PLUGIN.JSON, which Windows and macOS still load) isn't found, so its declared files fall back to by_path; look it up case-insensitively if such a plugin shows up.
+pub const PLUGIN_JSON: &str = ".claude-plugin/plugin.json";
+
+/// A relative path as Claude Code resolves it: `\` and `/` alike, `.` and `..` applied. Lowercased
+/// because Windows and macOS match file names case-insensitively; on Linux that over-flags, the safe side.
+fn normalize(p: &str) -> String {
+    let mut parts = Vec::new();
+    for part in p.split(['/', '\\']) {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(part),
+        }
+    }
+    parts.join("/").to_lowercase()
+}
+
+// shortcut: files a marketplace entry declares (strict: false) aren't read, pass the entry's fields once such a plugin shows up
+/// Files a plugin.json declares under `key` (`hooks`, `mcpServers`), normalized, relative to the plugin folder.
+fn declared(plugin_json: Option<&str>, key: &str) -> Vec<String> {
+    let v: serde_json::Value = plugin_json
+        .and_then(|t| serde_json::from_str(t).ok())
+        .unwrap_or_default();
+    let paths: Vec<&str> = match v.get(key) {
+        Some(serde_json::Value::String(s)) => vec![s],
+        Some(serde_json::Value::Array(a)) => a.iter().filter_map(|p| p.as_str()).collect(),
+        _ => Vec::new(),
+    };
+    paths.iter().map(|p| normalize(p)).collect()
+}
+
 /// Risks in an update, from the paths that differ and the contents of the files whose meaning
-/// depends on what's inside (`plugin.json` and `SKILL.md`).
+/// depends on what's inside (`plugin.json` and `SKILL.md`). `contents` may also hold an unchanged
+/// [`PLUGIN_JSON`], so hook and MCP files it declares under other names count as hooks and MCP.
 pub fn assess(changed: &[String], contents: &Contents) -> Vec<Risk> {
+    let (b, a) = contents.get(PLUGIN_JSON).cloned().unwrap_or_default();
+    let both = |key| [declared(b.as_deref(), key), declared(a.as_deref(), key)].concat();
+    let (hook_files, mcp_files) = (both("hooks"), both("mcpServers"));
     let mut found: BTreeMap<RiskKind, (Vec<String>, Vec<String>)> = BTreeMap::new();
     let mut add = |kind, file: &str, detail: Option<String>| {
         let (files, details) = found.entry(kind).or_default();
@@ -85,7 +122,16 @@ pub fn assess(changed: &[String], contents: &Contents) -> Vec<Risk> {
     };
     let (mut tools_added, mut tools_removed) = (Vec::new(), Vec::new());
     for path in changed {
-        if let Some(kind) = by_path(path) {
+        // A declared file wins over by_path, so a hook file under scripts/ is reported as a hook.
+        let norm = normalize(path);
+        let kind = if hook_files.contains(&norm) {
+            Some(RiskKind::Hooks)
+        } else if mcp_files.contains(&norm) {
+            Some(RiskKind::Mcp)
+        } else {
+            by_path(path)
+        };
+        if let Some(kind) = kind {
             add(kind, path, None);
         }
         let (before, after) = contents.get(path).cloned().unwrap_or_default();
@@ -209,7 +255,9 @@ pub fn between_folders(installed: &Path, latest: &Path) -> Vec<Risk> {
     let contents = changed
         .iter()
         .filter(|rel| matches!(file_name(rel).as_str(), "plugin.json" | "skill.md"))
-        .map(|rel| (rel.clone(), (read(&old, rel), read(&new, rel))))
+        .map(String::as_str)
+        .chain([PLUGIN_JSON])
+        .map(|rel| (rel.to_string(), (read(&old, rel), read(&new, rel))))
         .collect();
     assess(&changed, &contents)
 }
@@ -260,6 +308,29 @@ mod tests {
             r[2].files,
             ["hooks/session-start.mjs", "bin/tool", "skills/x/scripts/run.txt"]
         );
+    }
+
+    #[test]
+    fn json_files_in_hooks_folder_are_hooks() {
+        assert_eq!(by_path("hooks/claude-codex-hooks.json"), Some(RiskKind::Hooks));
+        assert_eq!(by_path("hooks/session-start.mjs"), Some(RiskKind::Scripts));
+        assert_eq!(by_path("server.mcpb"), Some(RiskKind::Mcp));
+    }
+
+    #[test]
+    fn hook_files_plugin_json_declares_are_hooks() {
+        let changed: Vec<String> = ["config/band.json", "config/servers.json", "scripts/x.json"]
+            .map(String::from)
+            .into();
+        let manifest = r#"{"hooks":["./Config/./Band.json","./scripts/x.json"],"mcpServers":"./config/servers.json"}"#;
+        let mut contents = Contents::new();
+        contents.insert(PLUGIN_JSON.into(), (Some(manifest.into()), Some(manifest.into())));
+        let r = assess(&changed, &contents);
+        assert_eq!(kinds(&r), [RiskKind::Hooks, RiskKind::Mcp]);
+        assert_eq!(r[0].files, ["config/band.json", "scripts/x.json"]);
+        assert!(assess(&changed[..2], &Contents::new()).is_empty());
+        assert_eq!(normalize("./Config/Über.json"), "config/über.json");
+        assert_eq!(normalize("a\\..\\hooks/x.json"), "hooks/x.json");
     }
 
     #[test]

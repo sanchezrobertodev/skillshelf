@@ -28,8 +28,8 @@ let pendingUpdate: Update | null = null;
 const tauriApi = {
   scan: () => invoke<ScanResult>("scan"),
   checkUpdates: () => invoke<CheckResult>("check_updates"),
-  runActions: (requests: ActionRequest[]) =>
-    invoke<{ jobId: number; itemId: string }[]>("run_actions", { requests }),
+  /** Queues the jobs; they report through `onJob`. */
+  runActions: (requests: ActionRequest[]) => invoke<void>("run_actions", { requests }),
   openFolder: (itemId: string) => invoke<void>("open_item_folder", { itemId }),
   openRepo: (itemId: string) => invoke<void>("open_item_repo", { itemId }),
   changelog: (itemId: string) => invoke<Changelog>("item_changelog", { itemId }),

@@ -1,9 +1,9 @@
 //! How often each skill, command, agent and plugin MCP server was used, counted from the session
 //! transcripts in ~/.claude/projects. Only bytes appended since the last run are read, and the
-//! counts are cached in the app data folder. This module has no network code: transcripts never
+//! uses found are cached in the app data folder. This module has no network code: transcripts never
 //! leave the machine.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use crate::paths;
 
 const WINDOW_DAYS: u32 = 30;
 /// Bump when the counting rules change, so old caches are rebuilt.
-const INDEX_VERSION: u32 = 1;
+const INDEX_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,8 +39,8 @@ pub struct UsageReport {
     pub indexed_at: u64,
 }
 
-/// Uses of one key (`skill:x`, `command:x`, `agent:x`, `mcp:plugin_p_server`) in one file.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+/// Uses of one key (`skill:x`, `command:x`, `agent:x`, `mcp:plugin_p_server`).
+#[derive(Debug, Clone, Default, PartialEq)]
 struct Counts {
     /// Day number (days since 1970-01-01, UTC) → uses.
     days: HashMap<u32, u32>,
@@ -51,7 +51,9 @@ struct Counts {
 struct FileState {
     /// Bytes read so far, always at a line boundary.
     offset: u64,
-    counts: HashMap<String, Counts>,
+    /// Tool use id (a typed command's line uuid) → `(key, timestamp)`. Resumed and forked sessions
+    /// copy earlier lines into their new file, so totals count each id once.
+    uses: HashMap<String, (String, String)>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -102,14 +104,11 @@ pub fn report(items: &[Item], cache: &Path, mut on_progress: impl FnMut(u64, u64
     }
     on_progress(to_read, to_read);
 
-    let tmp = cache.with_extension("tmp");
     if let Some(dir) = cache.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     let json = serde_json::to_vec(&index).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, json)
-        .and_then(|_| std::fs::rename(&tmp, cache))
-        .map_err(|e| format!("Could not save the usage index: {e}"))?;
+    crate::settings::write_atomic(cache, &json).map_err(|e| format!("Could not save the usage index: {e}"))?;
 
     let root = paths::claude_dir().join("projects");
     let all = totals(index.files.values());
@@ -125,16 +124,16 @@ pub fn report(items: &[Item], cache: &Path, mut on_progress: impl FnMut(u64, u64
 }
 
 fn totals<'a>(files: impl Iterator<Item = &'a FileState>) -> HashMap<&'a str, Counts> {
+    let mut seen = HashSet::new();
     let mut totals: HashMap<&str, Counts> = HashMap::new();
-    for state in files {
-        for (key, c) in &state.counts {
-            let t = totals.entry(key.as_str()).or_default();
-            for (day, n) in &c.days {
-                *t.days.entry(*day).or_default() += n;
-            }
-            if c.last > t.last {
-                t.last = c.last.clone();
-            }
+    for (id, (key, ts)) in files.flat_map(|s| &s.uses) {
+        let Some(day) = day_number(ts).filter(|_| seen.insert(id)) else {
+            continue;
+        };
+        let t = totals.entry(key.as_str()).or_default();
+        *t.days.entry(day).or_default() += 1;
+        if t.last.as_deref() < Some(ts.as_str()) {
+            t.last = Some(ts.clone());
         }
     }
     totals
@@ -199,12 +198,9 @@ fn read_appended(path: &Path, state: &mut FileState) -> std::io::Result<()> {
             return Ok(());
         }
         state.offset += n as u64;
-        for (key, timestamp) in uses_in_line(&line) {
-            let Some(day) = day_number(&timestamp) else { continue };
-            let c = state.counts.entry(key).or_default();
-            *c.days.entry(day).or_default() += 1;
-            if c.last.as_deref() < Some(timestamp.as_str()) {
-                c.last = Some(timestamp);
+        for (id, key, timestamp) in uses_in_line(&line) {
+            if day_number(&timestamp).is_some() {
+                state.uses.insert(id, (key, timestamp));
             }
         }
     }
@@ -214,6 +210,7 @@ fn read_appended(path: &Path, state: &mut FileState) -> std::io::Result<()> {
 struct Line {
     #[serde(rename = "type", default)]
     kind: String,
+    uuid: Option<String>,
     timestamp: Option<String>,
     message: Option<Message>,
 }
@@ -224,9 +221,9 @@ struct Message {
     content: Value,
 }
 
-/// `(key, timestamp)` for each use in one transcript line. Only assistant tool calls and the user's
-/// slash commands count; the same names inside tool results or request snapshots are ignored.
-fn uses_in_line(line: &[u8]) -> Vec<(String, String)> {
+/// `(id, key, timestamp)` for each use in one transcript line. Only assistant tool calls and the
+/// user's slash commands count; the same names inside tool results or request snapshots are ignored.
+fn uses_in_line(line: &[u8]) -> Vec<(String, String, String)> {
     static MARKER: OnceLock<Regex> = OnceLock::new();
     let marker = MARKER.get_or_init(|| {
         Regex::new(r#""name":"Skill"|"subagent_type":"|<command-name>/|"name":"mcp__plugin_"#).unwrap()
@@ -236,6 +233,7 @@ fn uses_in_line(line: &[u8]) -> Vec<(String, String)> {
     }
     let Ok(Line {
         kind,
+        uuid,
         timestamp: Some(ts),
         message: Some(msg),
     }) = serde_json::from_slice::<Line>(line)
@@ -249,19 +247,21 @@ fn uses_in_line(line: &[u8]) -> Vec<(String, String)> {
                 if block.get("type").and_then(Value::as_str) != Some("tool_use") {
                     continue;
                 }
+                let Some(id) = block.get("id").and_then(Value::as_str) else {
+                    continue;
+                };
                 let name = block.get("name").and_then(Value::as_str).unwrap_or("");
                 let input = |k: &str| block.pointer(&format!("/input/{k}")).and_then(Value::as_str);
-                match name {
-                    "Skill" => keys.extend(input("skill").map(|s| format!("skill:{s}"))),
-                    "Agent" | "Task" => keys.extend(input("subagent_type").map(|s| format!("agent:{s}"))),
-                    _ => {
-                        if let Some(server) = name.strip_prefix("mcp__").and_then(|r| r.split("__").next())
-                            && server.starts_with("plugin_")
-                        {
-                            keys.push(format!("mcp:{server}"));
-                        }
-                    }
-                }
+                let key = match name {
+                    "Skill" => input("skill").map(|s| format!("skill:{s}")),
+                    "Agent" | "Task" => input("subagent_type").map(|s| format!("agent:{s}")),
+                    _ => name
+                        .strip_prefix("mcp__")
+                        .and_then(|r| r.split("__").next())
+                        .filter(|server| server.starts_with("plugin_"))
+                        .map(|server| format!("mcp:{server}")),
+                };
+                keys.extend(key.map(|k| (id.to_string(), k)));
             }
         }
         "user" => {
@@ -276,13 +276,14 @@ fn uses_in_line(line: &[u8]) -> Vec<(String, String)> {
                     .split("<command-name>/")
                     .nth(1)
                     .and_then(|r| r.split("</command-name>").next())
+                && let Some(id) = uuid
             {
-                keys.push(format!("command:{}", name.trim()));
+                keys.push((id, format!("command:{}", name.trim())));
             }
         }
         _ => {}
     }
-    keys.into_iter().map(|k| (k, ts.clone())).collect()
+    keys.into_iter().map(|(id, k)| (id, k, ts.clone())).collect()
 }
 
 /// What counts as a use of this item: a plugin gets its namespaced skills, commands, agents and
@@ -338,12 +339,12 @@ mod tests {
     const SKILL: &str = r#"{"parentUuid":"x","type":"assistant","timestamp":"2026-10-23T06:43:02.042Z","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Skill","input":{"skill":"ui-ux-pro-max:ui-ux-pro-max","args":"x"}}]}}"#;
     const AGENT: &str = r#"{"type":"assistant","timestamp":"2026-10-24T01:00:00Z","message":{"content":[{"type":"tool_use","id":"t","name":"Agent","input":{"description":"d","subagent_type":"pm-skills:cs-pm-orchestrator"}}]},"wireToolInputs":{"t":{"subagent_type":"pm-skills:cs-pm-orchestrator"}}}"#;
     const MCP: &str = r#"{"type":"assistant","timestamp":"2026-10-24T02:00:00Z","message":{"content":[{"type":"tool_use","id":"t","name":"mcp__plugin_runpod_runpod__create-pod","input":{}}]}}"#;
-    const COMMAND: &str = r#"{"type":"user","timestamp":"2026-10-24T03:00:00Z","message":{"role":"user","content":"<command-message>runpod:runpod-mcp</command-message>\n<command-name>/runpod:runpod-mcp</command-name>"}}"#;
+    const COMMAND: &str = r#"{"type":"user","uuid":"u1","timestamp":"2026-10-24T03:00:00Z","message":{"role":"user","content":"<command-message>runpod:runpod-mcp</command-message>\n<command-name>/runpod:runpod-mcp</command-name>"}}"#;
     const MENTION: &str = r#"{"type":"user","timestamp":"2026-10-24T03:00:00Z","message":{"content":"Commands look like <command-name>/x</command-name>"}}"#;
     const SNAPSHOT: &str = r#"{"type":"api-request-shape","timestamp":"2026-10-24T03:00:00Z","shape":{"messages":[{"type":"tool_use","name":"Skill","input":{"skill":"dataviz"}}]}}"#;
 
     fn keys(line: &str) -> Vec<String> {
-        uses_in_line(line.as_bytes()).into_iter().map(|(k, _)| k).collect()
+        uses_in_line(line.as_bytes()).into_iter().map(|(_, k, _)| k).collect()
     }
 
     #[test]
@@ -395,21 +396,41 @@ mod tests {
         let mut state = FileState::default();
         read_appended(&file, &mut state).unwrap();
         assert_eq!(state.offset as usize, SKILL.len() + 1);
-        assert_eq!(state.counts.len(), 1);
+        assert_eq!(state.uses.len(), 1);
 
-        std::fs::write(&file, format!("{SKILL}\n{MCP}\n{MCP}\n")).unwrap();
+        let mcp2 = MCP.replace(r#""id":"t""#, r#""id":"t2""#);
+        std::fs::write(&file, format!("{SKILL}\n{MCP}\n{mcp2}\n")).unwrap();
         read_appended(&file, &mut state).unwrap();
-        read_appended(&file, &mut state).unwrap(); // nothing new: no double counting
-        let mcp = &state.counts["mcp:plugin_runpod_runpod"];
+        read_appended(&file, &mut state).unwrap(); // nothing new
+        assert_eq!(state.offset as usize, SKILL.len() + MCP.len() + mcp2.len() + 3);
+        let all = totals(std::iter::once(&state));
+        let mcp = &all["mcp:plugin_runpod_runpod"];
         assert_eq!(mcp.days.values().sum::<u32>(), 2);
         assert_eq!(mcp.last.as_deref(), Some("2026-10-24T02:00:00Z"));
-        assert_eq!(
-            state.counts["skill:ui-ux-pro-max:ui-ux-pro-max"]
-                .days
-                .values()
-                .sum::<u32>(),
-            1
-        );
+        assert_eq!(all["skill:ui-ux-pro-max:ui-ux-pro-max"].days.values().sum::<u32>(), 1);
+    }
+
+    #[test]
+    fn a_use_copied_into_another_transcript_counts_once() {
+        let dir = tempfile::tempdir().unwrap();
+        // A resumed session starts its file with copies of the earlier lines.
+        let original = format!("{SKILL}\n{COMMAND}\n");
+        let states: Vec<FileState> = [original.clone(), format!("{original}{MCP}\n")]
+            .iter()
+            .enumerate()
+            .map(|(n, text)| {
+                let file = dir.path().join(format!("{n}.jsonl"));
+                std::fs::write(&file, text).unwrap();
+                let mut state = FileState::default();
+                read_appended(&file, &mut state).unwrap();
+                state
+            })
+            .collect();
+        let all = totals(states.iter());
+        let uses = |key: &str| all[key].days.values().sum::<u32>();
+        assert_eq!(uses("skill:ui-ux-pro-max:ui-ux-pro-max"), 1);
+        assert_eq!(uses("command:runpod:runpod-mcp"), 1);
+        assert_eq!(uses("mcp:plugin_runpod_runpod"), 1);
     }
 
     #[test]
@@ -451,22 +472,23 @@ mod tests {
     #[test]
     fn project_skills_count_only_their_projects_sessions() {
         let today = day_number("2026-10-31").unwrap();
-        let used = |n: u32| FileState {
+        let used = |file: &str, n: u32| FileState {
             offset: 1,
-            counts: HashMap::from([(
-                "skill:deploy".to_string(),
-                Counts {
-                    days: HashMap::from([(today, n)]),
-                    last: None,
-                },
-            )]),
+            uses: (0..n)
+                .map(|i| {
+                    (
+                        format!("{file}-{i}"),
+                        ("skill:deploy".into(), "2026-10-31T00:00:00Z".into()),
+                    )
+                })
+                .collect(),
         };
         let index = Index {
             version: INDEX_VERSION,
             files: HashMap::from([
-                ("/p/C--work-app/s1.jsonl".to_string(), used(1)),
-                ("/p/C--work-app-api/s2.jsonl".to_string(), used(2)), // a folder inside the project
-                ("/p/C--work-shop/s3.jsonl".to_string(), used(4)),
+                ("/p/C--work-app/s1.jsonl".to_string(), used("s1", 1)),
+                ("/p/C--work-app-api/s2.jsonl".to_string(), used("s2", 2)), // a folder inside the project
+                ("/p/C--work-shop/s3.jsonl".to_string(), used("s3", 4)),
             ]),
         };
         let all = totals(index.files.values());

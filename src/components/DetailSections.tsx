@@ -1,8 +1,8 @@
-import clsx from "clsx";
 import { ChevronRight, CircleAlert, FileText, FolderSymlink, Gauge, History, LoaderCircle, Activity } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorText } from "../api";
 import { locale, tx, type TKey, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { issueText, relativeTime } from "../lib/format";
 import { hasHooks, loadsEverywhere } from "../lib/insights";
 import { useStore } from "../store";
@@ -146,7 +146,7 @@ export function UsageSection({ item }: { item: Item }) {
   );
 }
 
-/** SKILL.md or README.md, loaded when opened. Render with `key={item.id}` so another item starts closed. */
+/** SKILL.md or README.md, loaded when opened. DetailPanel is keyed by item id, so another item starts closed. */
 export function ReadmeSection({ item }: { item: Item }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -167,9 +167,9 @@ export function ReadmeSection({ item }: { item: Item }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className={clsx(heading, "-mx-1 rounded px-1 transition-colors duration-150 hover:text-fg")}
+        className={cx(heading, "-mx-1 rounded px-1 transition-colors duration-150 hover:text-fg")}
       >
-        <ChevronRight aria-hidden className={clsx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
+        <ChevronRight aria-hidden className={cx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
         <FileText aria-hidden className="size-3.5" />
         {name}
       </button>
@@ -231,7 +231,7 @@ export function LastRunSection({ item, finished }: { item: Item; finished: numbe
         {t("detail.lastAction")}
       </h3>
       <p className="text-[13px]">
-        {t(actionLabel[run.action])}: <span className={clsx(run.state === "failed" && "text-danger")}>{t(runLabel[run.state])}</span>
+        {t(actionLabel[run.action])}: <span className={cx(run.state === "failed" && "text-danger")}>{t(runLabel[run.state])}</span>
         <span className="text-xs text-muted"> · {relativeTime(run.finishedAt)}</span>
       </p>
       {run.message && <p className="text-xs text-muted">{run.message}</p>}
@@ -243,7 +243,7 @@ export function LastRunSection({ item, finished }: { item: Item; finished: numbe
             onClick={() => setOpen(!open)}
             className="mt-1 -ml-1 flex items-center gap-1 rounded px-1 text-xs font-medium text-muted hover:text-fg"
           >
-            <ChevronRight aria-hidden className={clsx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
+            <ChevronRight aria-hidden className={cx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
             {open ? t("detail.hideOutput") : t("detail.showOutput", { count: run.lines.length })}
           </button>
           {open && (

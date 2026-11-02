@@ -192,7 +192,7 @@ pub fn announce(app: &AppHandle, items: &[Item], file: &Path, text: &HashMap<Str
     if next != announced
         && let Ok(json) = serde_json::to_vec(&next)
     {
-        let _ = std::fs::write(file, json);
+        let _ = crate::settings::write_atomic(file, &json);
     }
     let in_front = app
         .get_webview_window("main")

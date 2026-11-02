@@ -209,7 +209,13 @@ function mockChangelog(item: Item): Changelog {
 export const mockApi = {
   scan: async (): Promise<ScanResult> => {
     await wait(400);
-    items = (await load()).map((i) => ({ ...i, status: "unchecked", latest: null, statusDetail: null }));
+    // Like scan::keep_verdicts: an item found again at the same version keeps its last check.
+    items = (await load()).map((i) => {
+      const p = items.find((p) => p.id === i.id && p.version === i.version && p.status !== "unchecked");
+      return p
+        ? { ...i, status: p.status, latest: p.latest, statusDetail: p.statusDetail, upstream: p.upstream }
+        : { ...i, status: "unchecked", latest: null, statusDetail: null };
+    });
     return { items, warnings: [], scannedAt: Date.now() };
   },
   checkUpdates: async (): Promise<CheckResult> => {
@@ -221,7 +227,7 @@ export const mockApi = {
   // Jobs run one after another, 1.2 s each, like the real queue.
   runActions: async (requests: ActionRequest[]) => {
     stopped = false;
-    return requests.map((r, n) => {
+    requests.forEach((r, n) => {
       const item = items.find((i) => i.id === r.itemId)!;
       const base = { jobId: job++, itemId: item.id, itemName: item.name, action: r.action, line: null, message: null, confirm: null };
       const emit = (e: Partial<JobEvent>, ms: number) =>
@@ -244,7 +250,6 @@ export const mockApi = {
         lines: [`mock: ${r.action} ${item.name}`],
         finishedAt: Date.now() + start + 1200,
       };
-      return { jobId: base.jobId, itemId: item.id };
     });
   },
   openFolder: async () => {},

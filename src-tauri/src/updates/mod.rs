@@ -97,10 +97,17 @@ pub async fn check_all(mut items: Vec<Item>) -> CheckResult {
     }
 }
 
-/// Compares two version strings when both are semver (a leading `v` is allowed).
+/// Compares two version strings when both parse as versions (see `changelog::parse_version`).
 pub fn semver_newer(installed: &str, latest: &str) -> Option<bool> {
-    let parse = |s: &str| semver::Version::parse(s.trim().trim_start_matches('v')).ok();
-    Some(parse(latest)? > parse(installed)?)
+    Some(changelog::parse_version(latest)? > changelog::parse_version(installed)?)
+}
+
+pub fn http() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent(concat!("skillshelf/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .expect("http client")
 }
 
 pub fn looks_like_sha(s: &str) -> bool {
@@ -120,6 +127,9 @@ mod tests {
         assert_eq!(semver_newer("2.13.0", "2.14.0"), Some(true));
         assert_eq!(semver_newer("v1.2.0", "1.2.0"), Some(false));
         assert_eq!(semver_newer("ea10b213686c", "1.0.0"), None);
+        assert_eq!(semver_newer("1.0.0", "ea10b213686c"), None);
+        assert_eq!(semver_newer("2.1", "2.2"), Some(true));
+        assert_eq!(semver_newer("V1.2.0", "1.3.0"), Some(true));
     }
 
     #[test]

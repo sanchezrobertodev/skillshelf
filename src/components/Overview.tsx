@@ -1,4 +1,3 @@
-import clsx from "clsx";
 import {
   BrushCleaning,
   CircleAlert,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { issueText, relativeTime } from "../lib/format";
 import { isUnused, loadsEverywhere, sessionTokens, shortCount } from "../lib/insights";
 import { updatable, useStore } from "../store";
@@ -24,7 +24,7 @@ const TOP = 5;
 function Tile({ title, icon: Icon, children, actions }: { title: string; icon: typeof Gauge; children: ReactNode; actions?: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={clsx(card, "flex flex-col p-4")}>
+    <section aria-labelledby={id} className={cx(card, "flex flex-col p-4")}>
       <h2 id={id} className="mb-3 flex items-center gap-2 text-[11px] font-semibold tracking-wider text-muted uppercase">
         <Icon aria-hidden className="size-4" />
         {title}
@@ -38,7 +38,7 @@ function Tile({ title, icon: Icon, children, actions }: { title: string; icon: t
 function Big({ value, label, tone }: { value: ReactNode; label: string; tone?: string }) {
   return (
     <p>
-      <span className={clsx("block text-3xl font-semibold tracking-tight tabular-nums", tone)}>{value}</span>
+      <span className={cx("block text-3xl font-semibold tracking-tight tabular-nums", tone)}>{value}</span>
       <span className="text-[13px] text-muted">{label}</span>
     </p>
   );
@@ -62,7 +62,7 @@ export function Overview() {
 
   if (!items.length)
     return (
-      <div className={clsx(card, "mx-5 mb-4 flex flex-1 items-center justify-center gap-2 text-[13px] text-muted")}>
+      <div className={cx(card, "mx-5 mb-4 flex flex-1 items-center justify-center gap-2 text-[13px] text-muted")}>
         {busy === "scanning" ? (
           <>
             <LoaderCircle aria-hidden className="size-4 animate-spin" />
@@ -113,7 +113,7 @@ export function Overview() {
             </>
           ) : (
             <Button size="sm" disabled={busy !== "idle"} onClick={() => void checkUpdates()}>
-              <RefreshCw aria-hidden className={clsx("size-3.5", busy === "checking" && "animate-spin")} />
+              <RefreshCw aria-hidden className={cx("size-3.5", busy === "checking" && "animate-spin")} />
               {t("overview.checkNow")}
             </Button>
           )

@@ -83,7 +83,7 @@ pub struct Item {
     pub meta: BTreeMap<String, String>,
     /// Plugins only: size of the plugin's data folder, `None` when it's missing or empty.
     pub data_bytes: Option<u64>,
-    /// A Claude Code mod: a plugin whose `hooks/hooks.json` loads UI modules.
+    /// A Claude Code mod: a plugin whose hook files (`hooks/hooks.json` or ones plugin.json declares) load UI modules.
     pub is_mod: bool,
     /// Rough tokens this item adds to every session while it's on.
     pub cost: Option<crate::cost::Cost>,

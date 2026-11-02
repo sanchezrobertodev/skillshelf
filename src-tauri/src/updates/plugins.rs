@@ -309,9 +309,27 @@ pub async fn git_head(repo: &Path) -> Result<String, String> {
     Ok(out.stdout.trim().to_string())
 }
 
+/// A marketplace catalog value passed to git as an argument. Catalogs are third-party, and a
+/// leading `-` would be read as an option: `--upload-pack=<cmd>` makes git run `<cmd>`.
+fn not_an_option(value: &str) -> Result<&str, String> {
+    if value.trim().starts_with('-') {
+        Err(format!(
+            "Refusing `{value}` from the marketplace catalog: it starts with `-`"
+        ))
+    } else {
+        Ok(value)
+    }
+}
+
 pub async fn ls_remote(url: &str, reference: Option<&str>) -> Result<String, String> {
     let r = reference.unwrap_or("HEAD");
-    let out = proc::run("git", &["ls-remote", url, r], None, GIT_TIMEOUT).await?;
+    let out = proc::run(
+        "git",
+        &["ls-remote", not_an_option(url)?, not_an_option(r)?],
+        None,
+        GIT_TIMEOUT,
+    )
+    .await?;
     if !out.success() {
         return Err(format!("git ls-remote failed: {}", out.stderr.trim()));
     }
@@ -322,8 +340,35 @@ pub async fn ls_remote(url: &str, reference: Option<&str>) -> Result<String, Str
         .ok_or_else(|| format!("`{r}` not found in {url}"))
 }
 
+/// A catalog's npm `package`, accepted only as a plain registry name: `name` or `@scope/name`.
+/// `npm view` also takes git, URL and folder specs, and fetching a git one runs its `prepare` scripts.
+fn registry_name(package: &str) -> Result<&str, String> {
+    let parts = match package.strip_prefix('@') {
+        Some(scoped) => scoped.split_once('/').map(|(scope, name)| vec![scope, name]),
+        None => Some(vec![package]),
+    };
+    let plain = |p: &&str| {
+        !p.is_empty()
+            && !p.starts_with(['.', '_', '-'])
+            && p.chars().all(|c| c.is_ascii_alphanumeric() || "-._~".contains(c))
+    };
+    if parts.is_some_and(|p| p.iter().all(plain)) {
+        Ok(package)
+    } else {
+        Err(format!(
+            "Refusing `{package}` from the marketplace catalog: not an npm registry package name"
+        ))
+    }
+}
+
 async fn npm_latest(package: &str) -> Result<String, String> {
-    let out = proc::run("npm", &["view", package, "version"], None, Duration::from_secs(60)).await?;
+    let out = proc::run(
+        "npm",
+        &["view", registry_name(package)?, "version"],
+        None,
+        Duration::from_secs(60),
+    )
+    .await?;
     if !out.success() {
         return Err(format!("npm view failed: {}", out.stderr.trim()));
     }
@@ -364,6 +409,38 @@ mod tests {
         git(p, &["add", "."]);
         git(p, &["commit", "-qm", "one"]);
         dir
+    }
+
+    #[test]
+    fn catalog_values_that_look_like_options_are_refused() {
+        for bad in ["--upload-pack=x", " -c x", "-x"] {
+            assert!(not_an_option(bad).is_err(), "{bad}");
+        }
+        assert_eq!(
+            not_an_option("https://example.com/r.git"),
+            Ok("https://example.com/r.git")
+        );
+    }
+
+    #[test]
+    fn npm_packages_must_be_registry_names() {
+        let git_sha = format!("github:o/r#{}", "a".repeat(40));
+        for bad in [
+            git_sha.as_str(),
+            "o/r",
+            "git+https://x/r.git",
+            "https://x/p.tgz",
+            "./p",
+            "file:p",
+            "C:\\p",
+            "-x",
+            "@scope",
+            "@scope/a/b",
+        ] {
+            assert!(registry_name(bad).is_err(), "{bad}");
+        }
+        assert_eq!(registry_name("pkg"), Ok("pkg"));
+        assert_eq!(registry_name("@scope/pkg"), Ok("@scope/pkg"));
     }
 
     #[tokio::test]
