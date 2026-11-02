@@ -39,7 +39,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
+      # The typecheck plus the production frontend build, so PRs that skip bundling still build it.
+      - run: npm run build
       - run: node scripts/contrast.mjs
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
