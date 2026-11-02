@@ -1,7 +1,7 @@
-import clsx from "clsx";
 import { CircleAlert, CircleCheck, CircleDashed, CircleHelp, Clock, KeyRound, LoaderCircle, Puzzle, RefreshCw, Server } from "lucide-react";
 import { useEffect } from "react";
 import { t, type TKey, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { relativeTime } from "../lib/format";
 import { useStore } from "../store";
 import type { McpServer, McpState } from "../types";
@@ -20,7 +20,7 @@ function Chip({ state }: { state: McpState }) {
   const t = useT();
   const { label, icon: Icon, cls } = mcpMeta[state];
   return (
-    <span className={clsx("inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium whitespace-nowrap", cls)}>
+    <span className={cx("inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium whitespace-nowrap", cls)}>
       <Icon aria-hidden className="size-3.5" />
       {t(label)}
     </span>
@@ -75,7 +75,7 @@ export function McpServers() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
-      <div className={clsx(card, "flex shrink-0 flex-wrap items-center gap-3 px-4 py-3")}>
+      <div className={cx(card, "flex shrink-0 flex-wrap items-center gap-3 px-4 py-3")}>
         <div className="min-w-0 flex-1">
           <p className="text-[13px]" aria-live="polite">
             {busy
@@ -105,7 +105,7 @@ export function McpServers() {
       )}
 
       {mcp && mcp.servers.length === 0 && (
-        <div className={clsx(card, "flex shrink-0 flex-col items-center gap-2 p-8 text-center")}>
+        <div className={cx(card, "flex shrink-0 flex-col items-center gap-2 p-8 text-center")}>
           <Server aria-hidden className="size-8 text-muted" />
           <p className="font-medium">{t("mcp.empty")}</p>
           <p className="max-w-sm text-[13px] text-muted">{t("mcp.emptyHint")}</p>
@@ -116,7 +116,7 @@ export function McpServers() {
         groups(mcp.servers).map((g) => {
           const item = g.plugin ? pluginItem(g.plugin) : undefined;
           return (
-            <section key={g.key} aria-label={g.title} className={clsx(card, "shrink-0 overflow-hidden")}>
+            <section key={g.key} aria-label={g.title} className={cx(card, "shrink-0 overflow-hidden")}>
               <header className="flex items-baseline gap-2 border-b border-border px-4 py-2.5">
                 {g.plugin && <Puzzle aria-hidden className="size-4 shrink-0 self-center text-info" />}
                 {item ? (

@@ -1,4 +1,3 @@
-import clsx from "clsx";
 import {
   CircleAlert,
   CircleArrowUp,
@@ -17,6 +16,7 @@ import {
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../i18n";
+import { cx } from "../lib/cx";
 import { statusLabel } from "../lib/format";
 import type { Kind, Status } from "../types";
 
@@ -35,7 +35,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={clsx(
+      className={cx(
         "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-colors duration-150",
         "disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" ? "h-8 px-2.5 text-[13px]" : "h-9 px-3.5 text-sm",
@@ -64,7 +64,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       title={label}
-      className={clsx(
+      className={cx(
         "inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-fg disabled:opacity-50",
         className,
       )}
@@ -94,7 +94,7 @@ export function StatusBadge({ status, checking, title }: { status: Status; check
   return (
     <span
       title={title ?? undefined}
-      className={clsx(
+      className={cx(
         "inline-flex h-6 max-w-full items-center gap-1 rounded-full border px-2 text-xs font-medium whitespace-nowrap",
         pending ? statusStyle.unchecked.cls : cls,
       )}
@@ -111,7 +111,7 @@ export function StatusBadge({ status, checking, title }: { status: Status; check
 
 export function KindIcon({ kind, className }: { kind: Kind; className?: string }) {
   const Icon = kind === "plugin" ? Puzzle : ScrollText;
-  return <Icon aria-hidden className={clsx("shrink-0", kind === "plugin" ? "text-info" : "text-accent", className)} />;
+  return <Icon aria-hidden className={cx("shrink-0", kind === "plugin" ? "text-info" : "text-accent", className)} />;
 }
 
 export function Checkbox({
@@ -170,7 +170,7 @@ export function Switch({
         e.stopPropagation();
         onChange();
       }}
-      className={clsx(
+      className={cx(
         "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-150",
         "disabled:cursor-not-allowed disabled:opacity-50",
         checked ? "border-accent bg-accent" : "border-border-strong bg-surface-2",
@@ -178,7 +178,7 @@ export function Switch({
     >
       <span
         aria-hidden
-        className={clsx(
+        className={cx(
           "size-3.5 rounded-full shadow-sm transition-transform duration-150 motion-reduce:transition-none",
           checked ? "translate-x-[18px] bg-accent-fg" : "translate-x-[2px] bg-muted",
         )}
@@ -251,7 +251,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby="modal-title"
         onMouseDown={(e) => e.stopPropagation()}
-        className={clsx(
+        className={cx(
           "flex max-h-[85vh] w-full flex-col rounded-xl border border-card-border bg-surface shadow-2xl",
           wide ? "max-w-2xl" : "max-w-lg",
         )}

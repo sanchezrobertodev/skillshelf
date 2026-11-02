@@ -1,11 +1,11 @@
-import clsx from "clsx";
 import { Bot, Copy, Download, ExternalLink, FolderOpen, Hammer, Plug, Power, PowerOff, RotateCcw, ScrollText, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { api, errorText } from "../api";
 import { type TKey, useT } from "../i18n";
 import { showsChangelog } from "../lib/changelog";
+import { cx } from "../lib/cx";
 import { canReinstall, canToggle, canUninstall, canUpdate, fullDate, kindLabel, sourceHelp, sourceLabel } from "../lib/format";
-import { useStore } from "../store";
+import { isActive, useStore } from "../store";
 import type { Child, Item } from "../types";
 import { ChangelogPanel } from "./Changelog";
 import { CostSection, IssueList, LastRunSection, ReadmeSection, UpstreamNote, UsageSection } from "./DetailSections";
@@ -23,7 +23,7 @@ function Fact({ label, children, mono }: { label: string; children: React.ReactN
   return (
     <>
       <dt className="text-muted">{label}</dt>
-      <dd className={clsx("min-w-0 break-words", mono && "font-mono text-xs leading-5")}>{children}</dd>
+      <dd className={cx("min-w-0 break-words", mono && "font-mono text-xs leading-5")}>{children}</dd>
     </>
   );
 }
@@ -39,8 +39,8 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
   const [copied, setCopied] = useState(false);
 
   const mine = Object.values(jobs).filter((j) => j.itemId === item.id);
-  const running = mine.some((j) => j.state === "queued" || j.state === "running");
-  const finished = mine.length - mine.filter((j) => j.state === "queued" || j.state === "running").length;
+  const running = mine.some(isActive);
+  const finished = mine.length - mine.filter(isActive).length;
   const groups = (Object.keys(childMeta) as Child["kind"][])
     .map((k) => ({ kind: k, list: item.children.filter((c) => c.kind === k) }))
     .filter((g) => g.list.length);
@@ -64,7 +64,7 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
   return (
     <aside
       aria-label={t("detail.label", { name: item.name })}
-      className={clsx(
+      className={cx(
         "flex w-[380px] shrink-0 flex-col overflow-hidden",
         card,
         overlay && "absolute top-0 right-5 bottom-4 z-30 shadow-2xl",
@@ -160,7 +160,7 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
 
         <IssueList item={item} />
 
-        {item.status === "updateAvailable" && <ChangelogPanel key={item.id} item={item} />}
+        {item.status === "updateAvailable" && <ChangelogPanel item={item} />}
 
         <CostSection item={item} />
         <UsageSection item={item} />
@@ -197,10 +197,10 @@ export function DetailPanel({ item, overlay }: { item: Item; overlay: boolean })
           </div>
         )}
 
-        <ReadmeSection key={item.id} item={item} />
+        <ReadmeSection item={item} />
         <LastRunSection item={item} finished={finished} />
 
-        {item.status !== "updateAvailable" && showsChangelog(item) && <ChangelogPanel key={item.id} item={item} />}
+        {item.status !== "updateAvailable" && showsChangelog(item) && <ChangelogPanel item={item} />}
 
         {groups.map(({ kind, list }) => {
           const { label, icon: Icon } = childMeta[kind];

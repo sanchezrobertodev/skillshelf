@@ -121,7 +121,7 @@ export default function App() {
           <div className="relative flex min-h-0 flex-1 gap-3 pr-5 pb-4">
             <FilterSidebar />
             <ItemList rows={rows} />
-            {active && <DetailPanel item={active} overlay={!wide} />}
+            {active && <DetailPanel key={active.id} item={active} overlay={!wide} />}
           </div>
         ) : screen === "overview" ? (
           <Overview />

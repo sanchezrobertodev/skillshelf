@@ -1,9 +1,9 @@
-import clsx from "clsx";
 import { ChevronRight, Download, FileCode, LoaderCircle, Plug, ShieldCheck, Webhook, Wrench } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { api, errorText } from "../api";
 import { type TKey, tx, useT } from "../i18n";
 import { changelogCounts, isEmpty, newestChange, useChangelog } from "../lib/changelog";
+import { cx } from "../lib/cx";
 import { relativeTime, riskText } from "../lib/format";
 import { useStore } from "../store";
 import type { Item, Risk } from "../types";
@@ -54,7 +54,7 @@ function RiskChip({ risk }: { risk: Risk }) {
         id={id}
         role="tooltip"
         style={at ?? undefined}
-        className={clsx("fixed z-50 w-80 rounded-lg border border-border bg-surface p-3 text-xs shadow-card", !at && "hidden")}
+        className={cx("fixed z-50 w-80 rounded-lg border border-border bg-surface p-3 text-xs shadow-card", !at && "hidden")}
       >
         <span className="block text-fg">{riskText(risk)}</span>
         <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted">
@@ -141,7 +141,7 @@ function Changes({ item, lookup, onError }: { item: Item; lookup: boolean; onErr
             onClick={() => setOpen(!open)}
             className="-ml-1 flex items-center gap-1 rounded px-1 text-xs font-medium text-muted hover:text-fg"
           >
-            <ChevronRight aria-hidden className={clsx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
+            <ChevronRight aria-hidden className={cx("size-3.5 transition-transform duration-150", open && "rotate-90")} />
             {open ? t("review.hideCommits") : t("review.showCommits", { count: log.entries.length })}
           </button>
           {open && (
@@ -234,7 +234,7 @@ export function ReviewSheet({ items }: { items: Item[] }) {
               />
             )}
             <KindIcon kind={i.kind} className="mt-0.5 size-4" />
-            <div className={clsx("min-w-0 flex-1 space-y-1", many && !ticked.has(i.id) && "opacity-60")}>
+            <div className={cx("min-w-0 flex-1 space-y-1", many && !ticked.has(i.id) && "opacity-60")}>
               <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] font-medium">
                 <span className="truncate">{i.name}</span>
                 <span className="font-mono text-xs font-normal text-muted">

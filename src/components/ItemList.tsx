@@ -1,12 +1,12 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import clsx from "clsx";
 import { ArrowDown, ArrowUp, ArrowUpDown, CircleAlert, Download, FilterX, Power, PowerOff, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { t, useT } from "../i18n";
-import { canToggle, canUninstall, canUpdate, issueText, kindLabel, relativeTime, sourceLabel } from "../lib/format";
+import { cx } from "../lib/cx";
+import { canToggle, canUninstall, issueText, kindLabel, relativeTime, sourceLabel } from "../lib/format";
 import { loadsEverywhere, shortCount } from "../lib/insights";
 import type { SortKey } from "../lib/prefs";
-import { useStore } from "../store";
+import { isActive, updatable, useStore } from "../store";
 import type { Item } from "../types";
 import { ContextMenu, type MenuTarget } from "./ContextMenu";
 import { Button, card, Checkbox, KindIcon, StatusBadge, Switch } from "./ui";
@@ -68,13 +68,13 @@ function SortHeader({ label, k, className }: { label: string; k: SortKey; classN
       <button
         type="button"
         onClick={() => setSort(k)}
-        className={clsx(
+        className={cx(
           "-mx-1.5 inline-flex h-7 items-center gap-1 rounded px-1.5 text-xs font-semibold tracking-wide uppercase transition-colors hover:text-fg",
           on ? "text-fg" : "text-muted",
         )}
       >
         {label}
-        <Icon aria-hidden className={clsx("size-3.5", !on && "opacity-50")} />
+        <Icon aria-hidden className={cx("size-3.5", !on && "opacity-50")} />
       </button>
     </div>
   );
@@ -109,7 +109,7 @@ function RowActions({ item, busy }: { item: Item; busy: boolean }) {
   const confirm = useStore((s) => s.confirm);
   return (
     <div className="flex items-center justify-end gap-2">
-      {item.status === "updateAvailable" && canUpdate(item) && (
+      {updatable([item]).length > 0 && (
         <button
           type="button"
           tabIndex={-1}
@@ -143,7 +143,7 @@ function BulkBar({ items }: { items: Item[] }) {
   const setSelected = useStore((s) => s.setSelected);
   const run = useStore((s) => s.run);
   const confirm = useStore((s) => s.confirm);
-  const updatable = items.filter((i) => i.status === "updateAvailable" && canUpdate(i));
+  const toUpdate = updatable(items);
   const toggleable = items.filter(canToggle);
   const removable = items.filter(canUninstall);
   return (
@@ -158,11 +158,11 @@ function BulkBar({ items }: { items: Item[] }) {
       <Button
         size="sm"
         variant="primary"
-        disabled={!updatable.length}
-        onClick={() => confirm({ type: "update", items: updatable })}
+        disabled={!toUpdate.length}
+        onClick={() => confirm({ type: "update", items: toUpdate })}
       >
         <Download aria-hidden className="size-3.5" />
-        {updatable.length ? t("list.updateCount", { count: updatable.length }) : t("list.updateNone")}
+        {toUpdate.length ? t("list.updateCount", { count: toUpdate.length }) : t("list.updateNone")}
       </Button>
       <Button
         size="sm"
@@ -226,7 +226,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
   const closeDetail = useStore((s) => s.closeDetail);
   const jobs = useStore((s) => s.jobs);
   const busyIds = useMemo(
-    () => new Set(Object.values(jobs).filter((j) => j.state === "queued" || j.state === "running").map((j) => j.itemId)),
+    () => new Set(Object.values(jobs).filter(isActive).map((j) => j.itemId)),
     [jobs],
   );
   const [menu, setMenu] = useState<MenuTarget | null>(null);
@@ -323,7 +323,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
   };
 
   return (
-    <section ref={wrap} aria-label={t("list.installed")} className={clsx("flex min-w-0 flex-1 flex-col overflow-hidden", card)}>
+    <section ref={wrap} aria-label={t("list.installed")} className={cx("flex min-w-0 flex-1 flex-col overflow-hidden", card)}>
       {selectedRows.length > 0 && <BulkBar items={selectedRows} />}
 
       <div
@@ -383,7 +383,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
               {virtualizer.getVirtualItems().map((v) => {
                 const item = rows[v.index];
                 const isSelected = selected.has(item.id);
-                const isActive = item.id === activeId;
+                const isCurrent = item.id === activeId;
                 return (
                   <div
                     key={item.id}
@@ -396,9 +396,9 @@ export function ItemList({ rows }: { rows: Item[] }) {
                       e.preventDefault();
                       openMenu(item, e.clientX, e.clientY);
                     }}
-                    className={clsx(
+                    className={cx(
                       "absolute inset-x-0 grid cursor-pointer items-center gap-3 border-b border-border px-4 transition-colors duration-100",
-                      isActive ? "bg-surface-2 shadow-[inset_3px_0_0_var(--accent)]" : isSelected ? "bg-accent/6" : "hover:bg-surface-hover",
+                      isCurrent ? "bg-surface-2 shadow-[inset_3px_0_0_var(--accent)]" : isSelected ? "bg-accent/6" : "hover:bg-surface-hover",
                     )}
                     style={{ height: ROW_HEIGHT, transform: `translateY(${v.start}px)`, gridTemplateColumns: grid }}
                   >
@@ -453,7 +453,7 @@ export function ItemList({ rows }: { rows: Item[] }) {
                       <div
                         role="gridcell"
                         title={costTitle(item)}
-                        className={clsx("font-mono text-xs tabular-nums", !loadsEverywhere(item) && "text-muted")}
+                        className={cx("font-mono text-xs tabular-nums", !loadsEverywhere(item) && "text-muted")}
                       >
                         {item.cost?.total ? `≈${shortCount(item.cost.total)}` : "—"}
                       </div>

@@ -117,7 +117,7 @@ export function ConfirmDialogs() {
   if (!confirmation) return null;
   switch (confirmation.type) {
     case "update":
-      return <ReviewSheet items={confirmation.items} />;
+      return <ReviewSheet key={confirmation.items.map((i) => i.id).join("\n")} items={confirmation.items} />;
     case "uninstall":
       return <UninstallDialog items={confirmation.items} />;
     case "command":

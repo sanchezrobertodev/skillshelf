@@ -1,8 +1,8 @@
-import clsx from "clsx";
 import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleSlash, Clock, LoaderCircle, ShieldQuestion, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type TKey, useT } from "../i18n";
-import { useStore } from "../store";
+import { cx } from "../lib/cx";
+import { isActive, useStore } from "../store";
 import type { Action, Job } from "../types";
 import { Button, card } from "./ui";
 
@@ -41,10 +41,10 @@ function JobRow({ job }: { job: Job }) {
   return (
     <li className="border-b border-border last:border-b-0">
       <div className="flex h-10 items-center gap-3 px-4 text-[13px]">
-        <Icon aria-hidden className={clsx("size-4 shrink-0", meta.cls, job.state === "running" && "animate-spin")} />
+        <Icon aria-hidden className={cx("size-4 shrink-0", meta.cls, job.state === "running" && "animate-spin")} />
         <span className="w-20 shrink-0 text-muted">{t(actionLabel[job.action])}</span>
         <span className="min-w-0 flex-1 truncate font-medium">{job.itemName}</span>
-        <span className={clsx("hidden max-w-[40%] truncate text-xs sm:inline", job.state === "failed" ? "text-danger" : "text-muted")} title={job.message ?? undefined}>
+        <span className={cx("hidden max-w-[40%] truncate text-xs sm:inline", job.state === "failed" ? "text-danger" : "text-muted")} title={job.message ?? undefined}>
           {job.message ?? t(meta.label)}
         </span>
         {job.state === "needsConfirmation" && (
@@ -87,14 +87,14 @@ export function QueueDrawer() {
   const list = Object.values(jobs).sort((a, b) => attention(a) - attention(b) || b.jobId - a.jobId);
   if (!list.length) return null;
 
-  const active = list.filter((j) => j.state === "queued" || j.state === "running").length;
+  const active = list.filter(isActive).length;
   const failed = list.filter((j) => j.state === "failed").length;
   const done = list.filter((j) => j.state === "success").length;
   const batch = list.filter((j) => j.jobId >= batchFrom);
-  const batchDone = batch.length - batch.filter((j) => j.state === "queued" || j.state === "running").length;
+  const batchDone = batch.length - batch.filter(isActive).length;
 
   return (
-    <section aria-label={t("queue.label")} className={clsx("mx-5 mb-4 shrink-0 overflow-hidden", card)}>
+    <section aria-label={t("queue.label")} className={cx("mx-5 mb-4 shrink-0 overflow-hidden", card)}>
       <div className="flex h-10 items-center gap-3 px-4">
         <button
           type="button"

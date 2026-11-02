@@ -77,6 +77,7 @@ const prefs = loadPrefs();
 let lastTray = "";
 
 export const updatable = (items: Item[]) => items.filter((i) => i.status === "updateAvailable" && canUpdate(i));
+export const isActive = (j: Job) => j.state === "queued" || j.state === "running";
 
 function appUpdateLabel(): string | null {
   const { clone, update } = useAppUpdate.getState();
@@ -94,13 +95,23 @@ function traySummary(s: State): TraySummary {
     text: group("tray."),
   };
 }
-/** Set when an action finished; the list is rescanned once the queue drains. */
-let refreshAfterQueue = false;
+/**
+ * A rescan asked for while a scan or check ran, or after an action finished. It runs once nothing is
+ * busy and the queue has drained, checking if any caller asked for a check.
+ */
+let pending: { check?: boolean } | null = null;
 
 export const useStore = create<State>((set, get) => {
   const persist = () => {
     const { theme, palette, language, sort, filters } = get();
     savePrefs({ theme, palette, language, sort, filters });
+  };
+  const runPending = () => {
+    const s = get();
+    if (!pending || s.busy !== "idle" || Object.values(s.jobs).some(isActive)) return;
+    const opts = pending;
+    pending = null;
+    void s.refresh(opts);
   };
 
   return {
@@ -162,21 +173,17 @@ export const useStore = create<State>((set, get) => {
     },
 
     refresh: async (opts) => {
-      if (get().busy !== "idle") return;
+      if (get().busy !== "idle") {
+        pending = { check: pending?.check || opts?.check };
+        return;
+      }
       set({ busy: "scanning", error: null });
       try {
+        // The scan command already keeps the last check's verdicts (scan::keep_verdicts).
         const r = await api.scan();
         const ids = new Set(r.items.map((i) => i.id));
-        // Keep the last known status until the next check replaces it, unless the version changed.
-        const prev = new Map(get().items.map((i) => [i.id, i]));
-        const items = r.items.map((i) => {
-          const p = prev.get(i.id);
-          return p && p.status !== "unchecked" && p.version === i.version
-            ? { ...i, status: p.status, latest: p.latest, statusDetail: p.statusDetail }
-            : i;
-        });
         set((s) => ({
-          items,
+          items: r.items,
           warnings: r.warnings,
           scannedAt: r.scannedAt,
           checkedAt: null,
@@ -185,11 +192,14 @@ export const useStore = create<State>((set, get) => {
         }));
       } catch (e) {
         set({ error: errorText(e), busy: "idle" });
+        runPending();
         return;
       }
       set({ busy: "idle" });
       void get().loadUsage();
+      // checkUpdates runs the pending rescan itself when it finishes.
       if (opts?.check ?? get().settings.autoCheck) await get().checkUpdates();
+      else runPending();
     },
 
     loadMcp: async () => {
@@ -219,6 +229,11 @@ export const useStore = create<State>((set, get) => {
 
     checkUpdates: async () => {
       if (get().busy !== "idle") return;
+      // The backend refuses a check while actions run; the rescan after the queue drains does it instead.
+      if (Object.values(get().jobs).some(isActive)) {
+        pending = { check: true };
+        return;
+      }
       set({ busy: "checking", error: null });
       try {
         const r = await api.checkUpdates();
@@ -227,10 +242,15 @@ export const useStore = create<State>((set, get) => {
         set({ error: errorText(e) });
       } finally {
         set({ busy: "idle" });
+        runPending();
       }
     },
 
     run: async (requests) => {
+      // The buttons stay enabled while a job waits; a second click would only queue a job that fails.
+      // shortcut: a job counts once its queued event arrives, add an in-flight set if two calls can beat that.
+      const active = Object.values(get().jobs).filter(isActive);
+      requests = requests.filter((r) => !active.some((j) => j.itemId === r.itemId && j.action === r.action));
       if (!requests.length) return;
       try {
         await api.runActions(requests);
@@ -251,7 +271,7 @@ export const useStore = create<State>((set, get) => {
     onJob: (e) => {
       set((s) => {
         const prev = s.jobs[e.jobId];
-        const idle = !Object.values(s.jobs).some((j) => j.state === "queued" || j.state === "running");
+        const idle = !Object.values(s.jobs).some(isActive);
         const batchFrom = !prev && idle ? e.jobId : s.batchFrom;
         const job: Job = prev ?? {
           jobId: e.jobId,
@@ -275,12 +295,8 @@ export const useStore = create<State>((set, get) => {
         return { jobs: { ...s.jobs, [e.jobId]: next }, batchFrom, restartNeeded, confirmation };
       });
 
-      if (e.state === "success") refreshAfterQueue = true;
-      const active = Object.values(get().jobs).some((j) => j.state === "queued" || j.state === "running");
-      if (!active && refreshAfterQueue) {
-        refreshAfterQueue = false;
-        void get().refresh({ check: true });
-      }
+      if (e.state === "success") pending = { check: true };
+      runPending();
     },
 
     // Searching always shows the results, wherever you typed.
@@ -333,7 +349,7 @@ export const useStore = create<State>((set, get) => {
     setQueueOpen: (queueOpen) => set({ queueOpen }),
     clearFinishedJobs: () =>
       set((s) => ({
-        jobs: Object.fromEntries(Object.entries(s.jobs).filter(([, j]) => j.state === "queued" || j.state === "running")),
+        jobs: Object.fromEntries(Object.entries(s.jobs).filter(([, j]) => isActive(j))),
       })),
     confirm: (confirmation) => set({ confirmation }),
     dismissRestart: () => set({ restartNeeded: false }),

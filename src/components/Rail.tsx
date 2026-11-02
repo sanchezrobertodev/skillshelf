@@ -1,6 +1,6 @@
-import clsx from "clsx";
 import { BrushCleaning, LayoutDashboard, LibraryBig, Monitor, Moon, Server, Settings, Sun } from "lucide-react";
 import { type TKey, useT } from "../i18n";
+import { cx } from "../lib/cx";
 import type { Theme } from "../lib/prefs";
 import { type Screen, useStore } from "../store";
 
@@ -25,7 +25,7 @@ export function Rail() {
   const setTheme = useStore((s) => s.setTheme);
   const t = useT();
   const ThemeIcon = themeIcon[theme];
-  const nav = (id: Screen) => clsx(itemCls, screen === id ? "bg-nav-active text-nav-active-fg" : idleCls);
+  const nav = (id: Screen) => cx(itemCls, screen === id ? "bg-nav-active text-nav-active-fg" : idleCls);
 
   return (
     <nav aria-label={t("rail.sections")} className="flex w-20 shrink-0 flex-col items-center gap-1.5 border-r border-border bg-surface py-3">
@@ -50,7 +50,7 @@ export function Rail() {
       <div className="mt-auto flex flex-col items-center gap-1.5">
         <button
           type="button"
-          className={clsx(itemCls, idleCls)}
+          className={cx(itemCls, idleCls)}
           aria-label={t("rail.themeToggle", { current: t(`mode.${theme}`), next: t(`mode.${nextTheme[theme]}`) })}
           onClick={() => setTheme(nextTheme[theme])}
         >

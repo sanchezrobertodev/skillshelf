@@ -2,7 +2,7 @@
 //! installed_plugins.json for the commit each plugin was installed from.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -109,8 +109,13 @@ fn to_item(p: CliPlugin, installed: &HashMap<String, Vec<InstalledEntry>>, known
             .cloned()
     });
 
+    // Project and local installs repeat once per project, so their ids carry it; user ids stay as they were.
+    let id = match &p.project_path {
+        Some(project) => format!("plugin:{}:{}:{}", p.id, scope, project),
+        None => format!("plugin:{}:{}", p.id, scope),
+    };
     let mut item = Item::new(
-        format!("plugin:{}:{}", p.id, scope),
+        id,
         Kind::Plugin,
         if synced { Source::Synced } else { Source::Marketplace },
         name.clone(),
@@ -145,7 +150,9 @@ fn to_item(p: CliPlugin, installed: &HashMap<String, Vec<InstalledEntry>>, known
         }
         item.repo_url = manifest_repo(&manifest);
         item.children = children(path, &manifest, p.mcp_servers.as_ref());
-        item.is_mod = read_json(&path.join("hooks").join("hooks.json")).is_some_and(|h| h.get("modules").is_some());
+        item.is_mod = component_paths(path, &manifest, "hooks", HOOKS_FILE)
+            .iter()
+            .any(|f| read_json(f).is_some_and(|h| h.get("modules").is_some()));
     }
 
     if item.repo_url.is_none() {
@@ -204,26 +211,51 @@ fn manifest_repo(manifest: &Value) -> Option<String> {
 /// Skills, commands, agents, MCP servers and hooks a plugin ships.
 pub fn children(root: &Path, manifest: &Value, mcp_from_cli: Option<&serde_json::Map<String, Value>>) -> Vec<Child> {
     let mut out = Vec::new();
+    // A declared "./skills/x" or "./commands/x.md" is also inside its default folder.
+    let mut seen: Vec<PathBuf> = Vec::new();
 
-    for dir in subdirs(&root.join("skills")) {
-        let skill_md = dir.join("SKILL.md");
-        if skill_md.is_file() {
-            let fm = read_front_matter(&skill_md);
-            out.push(Child {
-                kind: "skill".into(),
-                name: fm.name.unwrap_or_else(|| file_name(&dir)),
-                description: fm.description,
-            });
+    for folder in component_paths(root, manifest, "skills", "skills") {
+        // A declared path can be one skill's folder as well as a folder of skills.
+        let dirs = if folder.join("SKILL.md").is_file() {
+            vec![folder]
+        } else {
+            subdirs(&folder)
+        };
+        for dir in dirs {
+            if seen.contains(&dir) {
+                continue;
+            }
+            seen.push(dir.clone());
+            let skill_md = dir.join("SKILL.md");
+            if skill_md.is_file() {
+                let fm = read_front_matter(&skill_md);
+                out.push(Child {
+                    kind: "skill".into(),
+                    name: fm.name.unwrap_or_else(|| file_name(&dir)),
+                    description: fm.description,
+                });
+            }
         }
     }
     for (kind, dir) in [("command", "commands"), ("agent", "agents")] {
-        for file in markdown_files(&root.join(dir)) {
-            let fm = read_front_matter(&file);
-            out.push(Child {
-                kind: kind.into(),
-                name: fm.name.unwrap_or_else(|| file_stem(&file)),
-                description: fm.description,
-            });
+        for path in component_paths(root, manifest, dir, dir) {
+            let files = if path.is_file() {
+                vec![path]
+            } else {
+                markdown_files(&path)
+            };
+            for file in files {
+                if seen.contains(&file) {
+                    continue;
+                }
+                seen.push(file.clone());
+                let fm = read_front_matter(&file);
+                out.push(Child {
+                    kind: kind.into(),
+                    name: fm.name.unwrap_or_else(|| file_stem(&file)),
+                    description: fm.description,
+                });
+            }
         }
     }
 
@@ -242,14 +274,39 @@ pub fn children(root: &Path, manifest: &Value, mcp_from_cli: Option<&serde_json:
         description: None,
     }));
 
-    if let Some(Value::Object(hooks)) =
-        read_json(&root.join("hooks").join("hooks.json")).and_then(|v| v.get("hooks").cloned())
-    {
-        out.extend(hooks.keys().map(|event| Child {
-            kind: "hook".into(),
-            name: event.clone(),
-            description: None,
-        }));
+    for file in component_paths(root, manifest, "hooks", HOOKS_FILE) {
+        if let Some(Value::Object(hooks)) = read_json(&file).and_then(|v| v.get("hooks").cloned()) {
+            out.extend(hooks.keys().map(|event| Child {
+                kind: "hook".into(),
+                name: event.clone(),
+                description: None,
+            }));
+        }
+    }
+    out
+}
+
+const HOOKS_FILE: &str = "hooks/hooks.json";
+
+/// The default place for a component plus the paths plugin.json adds to it (`"./x"` or `["./x", ...]`).
+/// shortcut: inline hook config in plugin.json isn't read, read it once a plugin ships one.
+fn component_paths(root: &Path, manifest: &Value, key: &str, default: &str) -> Vec<PathBuf> {
+    let declared: Vec<&str> = match manifest.get(key) {
+        Some(Value::String(s)) => vec![s.as_str()],
+        Some(Value::Array(list)) => list.iter().filter_map(Value::as_str).collect(),
+        _ => Vec::new(),
+    };
+    let mut out = vec![root.join(default)];
+    for rel in declared.into_iter().map(Path::new) {
+        // Absolute paths and `..` would reach outside the plugin folder.
+        let inside = rel
+            .components()
+            .all(|c| matches!(c, Component::CurDir | Component::Normal(_)));
+        // Path equality ignores `./` and trailing slashes, so a declared "./skills/" matches the default.
+        let path = root.join(rel);
+        if inside && !out.contains(&path) {
+            out.push(path);
+        }
     }
     out
 }
@@ -351,5 +408,59 @@ mod tests {
         let kids = children(root, &Value::Null, None);
         let names: Vec<_> = kids.iter().map(|c| format!("{}:{}", c.kind, c.name)).collect();
         assert_eq!(names, ["skill:alpha", "command:go", "mcp:srv"]);
+    }
+
+    #[test]
+    fn reads_components_from_paths_plugin_json_declares() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("plugin");
+        for (file, text) in [
+            ("plugin/skills/alpha/SKILL.md", "---\nname: alpha\n---\n"),
+            ("plugin/.claude/skills/beta/SKILL.md", "---\nname: beta\n---\n"),
+            ("outside/gamma/SKILL.md", "---\nname: gamma\n---\n"),
+            ("plugin/hooks/hooks.json", r#"{"hooks":{"Stop":[]}}"#),
+            (
+                "plugin/hooks/band.json",
+                r#"{"hooks":{"SessionStart":[]},"modules":["./band/register.tsx"]}"#,
+            ),
+        ] {
+            let path = dir.path().join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let outside = dir.path().join("outside").display().to_string();
+        let manifest = serde_json::json!({
+            "skills": ["./skills/", "./skills/alpha", "./.claude/skills", "../outside", outside],
+            "hooks": ["./hooks/hooks.json", "./hooks/band.json"],
+        });
+        let names: Vec<_> = children(&root, &manifest, None)
+            .iter()
+            .map(|c| format!("{}:{}", c.kind, c.name))
+            .collect();
+        assert_eq!(names, ["skill:alpha", "skill:beta", "hook:Stop", "hook:SessionStart"]);
+
+        std::fs::create_dir_all(root.join(".claude-plugin")).unwrap();
+        std::fs::write(root.join(".claude-plugin/plugin.json"), manifest.to_string()).unwrap();
+        let plugin = CliPlugin {
+            id: "x@m".into(),
+            install_path: Some(root.display().to_string()),
+            ..Default::default()
+        };
+        assert!(to_item(plugin, &HashMap::new(), &Value::Null).is_mod);
+    }
+
+    #[test]
+    fn project_installs_get_an_id_per_project() {
+        let id = |scope: &str, project: Option<&str>| {
+            let p = CliPlugin {
+                id: "x@m".into(),
+                scope: Some(scope.into()),
+                project_path: project.map(str::to_string),
+                ..Default::default()
+            };
+            to_item(p, &HashMap::new(), &Value::Null).id
+        };
+        assert_eq!(id("user", None), "plugin:x@m:user");
+        assert_ne!(id("project", Some("C:\\a")), id("project", Some("C:\\b")));
     }
 }

@@ -17,6 +17,7 @@ jobs:
         with:
           # A pull request checks out a merge commit; its first parent is the base branch.
           fetch-depth: 2
+          persist-credentials: false
       # A pull request bundles only when it touches the Rust app, the npm packages or CI, the
       # parts that can build differently per OS. Pushes, tags and manual runs always bundle.
       - name: Platform-specific changes
@@ -47,8 +48,8 @@ jobs:
 
   bundle:
     needs: test
-    if: github.event_name != 'pull_request' || needs.test.outputs.native == 'true'
-    strategy:
+    if: github.event_name != 'pull_request'
+    strategy: &bundle-strategy
       fail-fast: false
       matrix:
         include:
@@ -62,23 +63,31 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      - name: Linux build dependencies
+      - &checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - &linux-deps
+        name: Linux build dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - uses: dtolnay/rust-toolchain@stable
+      - &rust-toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - uses: Swatinem/rust-cache@v2
+      - &rust-cache
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - uses: actions/setup-node@v7
+      - &setup-node
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - &npm-ci
+        run: npm ci
       # The tag's CHANGELOG.md section becomes the release notes, and tauri-action copies it
       # into latest.json, where the app reads it. Fails if the section is missing or the tag
       # doesn't match the app version.
@@ -96,7 +105,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       # On tags this creates a draft GitHub release with the installers, the updater bundles,
       # their .sig files and latest.json attached; otherwise the bundles are uploaded as workflow
-      # artifacts. Pull requests don't get the signing key, so they skip the updater bundles.
+      # artifacts.
       - uses: tauri-apps/tauri-action@v0
         id: tauri
         env:
@@ -104,13 +113,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: ${{ matrix.args }} ${{ github.event_name == 'pull_request' && '--config src-tauri/tauri.no-updater.conf.json' || '' }}
+          args: ${{ matrix.args }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Skillshelf {0}', github.ref_name) || '' }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           updaterJsonPreferNsis: true
-      - uses: actions/upload-artifact@v7
+      - &upload-bundles
+        uses: actions/upload-artifact@v7
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
           name: skillshelf-${{ matrix.platform }}
@@ -122,3 +132,26 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.deb
             src-tauri/target/**/release/bundle/**/*.rpm
           if-no-files-found: ignore
+
+  # Pull requests run unmerged build code, and any secret a job references is sent to its runner,
+  # as is the job's token (through checkout's and setup-node's default `token` input). That is why
+  # this job references no secrets and gets a read-only token.
+  bundle-pr:
+    name: bundle
+    needs: test
+    if: github.event_name == 'pull_request' && needs.test.outputs.native == 'true'
+    strategy: *bundle-strategy
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+    steps:
+      - *checkout
+      - *linux-deps
+      - *rust-toolchain
+      - *rust-cache
+      - *setup-node
+      - *npm-ci
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          args: ${{ matrix.args }} --config src-tauri/tauri.no-updater.conf.json
+      - *upload-bundles

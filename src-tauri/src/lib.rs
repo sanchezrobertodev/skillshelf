@@ -66,7 +66,7 @@ impl AppState {
         let mut runs = self.last_runs.lock().unwrap();
         runs.insert(item_id.to_string(), run);
         if let Ok(json) = serde_json::to_vec(&*runs) {
-            let _ = std::fs::write(&self.last_runs_file, json);
+            let _ = settings::write_atomic(&self.last_runs_file, &json);
         }
     }
 }
@@ -83,6 +83,13 @@ async fn scan(state: State<'_, AppState>) -> Result<ScanResult, String> {
 
 #[tauri::command]
 async fn check_updates(app: AppHandle, state: State<'_, AppState>) -> Result<CheckResult, String> {
+    // Refreshing the marketplaces pulls the clones `claude plugin update` installs from. No waiting
+    // behind the queue: this check would use the items scanned before it, and the UI checks anyway
+    // once the queue is done.
+    let _guard = state
+        .action_lock
+        .try_lock()
+        .map_err(|_| "Actions are running. Check for updates again once they finish.".to_string())?;
     let items = state.items.lock().unwrap().clone();
     let result = updates::check_all(items).await;
     *state.items.lock().unwrap() = result.items.clone();
@@ -138,20 +145,9 @@ fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
     if on { launcher.enable() } else { launcher.disable() }.map_err(|e| e.to_string())
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct JobInfo {
-    job_id: u64,
-    item_id: String,
-}
-
+/// Queues the jobs; they report through `job` events.
 #[tauri::command]
-async fn run_actions(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    requests: Vec<ActionRequest>,
-) -> Result<Vec<JobInfo>, String> {
-    let mut jobs = Vec::new();
+async fn run_actions(app: AppHandle, state: State<'_, AppState>, requests: Vec<ActionRequest>) -> Result<(), String> {
     for req in requests {
         let mut item = state.item(&req.item_id)?;
         let job_id = state.next_job.fetch_add(1, Ordering::Relaxed);
@@ -166,10 +162,6 @@ async fn run_actions(
             confirm: None,
         };
         let _ = app.emit("job", &event);
-        jobs.push(JobInfo {
-            job_id,
-            item_id: item.id.clone(),
-        });
 
         let generation = *state.cancel.borrow();
         let app = app.clone();
@@ -204,7 +196,7 @@ async fn run_actions(
                         lines.push(l.to_string());
                         emit(JobState::Log, Some(l.to_string()), None, None)
                     });
-                    // Dropping the run kills its process (kill_on_drop).
+                    // Dropping the run kills its whole process tree (proc::run_streaming).
                     tokio::select! {
                         f = run => Some(f),
                         _ = stop.wait_for(|g| *g != generation) => None,
@@ -232,7 +224,7 @@ async fn run_actions(
             emit(job_state, None, message, confirm);
         });
     }
-    Ok(jobs)
+    Ok(())
 }
 
 #[tauri::command]

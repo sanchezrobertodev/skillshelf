@@ -12,6 +12,8 @@ export function Sparkline({ daily, className }: { daily: number[]; className?: s
   const day = new Date(Date.now() - (daily.length - 1 - busiest) * 86_400_000).toLocaleDateString(locale(), {
     month: "short",
     day: "numeric",
+    // Usage is bucketed by UTC day (usage.rs).
+    timeZone: "UTC",
   });
   const label = total ? t("sparkline.label", { count: total, day, max: daily[busiest] }) : t("sparkline.none");
   return (
