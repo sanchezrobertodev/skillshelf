@@ -53,8 +53,8 @@ The same lookup compares your version with the latest and flags four kinds of ch
 
 | Flag | Files |
 |---|---|
-| Hooks | `hooks/hooks.json`, or `hooks` in `plugin.json` |
-| MCP servers | `.mcp.json`, or `mcpServers` in `plugin.json` |
+| Hooks | `hooks/hooks.json`, any other `.json` file in a `hooks/` folder, and `hooks` in `plugin.json` with the files it names |
+| MCP servers | `.mcp.json`, `.mcpb` and `.dxt` bundles, and `mcpServers` in `plugin.json` with the files it names |
 | Scripts | shell, PowerShell, Python, JavaScript/TypeScript, Ruby, Perl, `.cmd`, `.bat`, `.exe`, and anything under `bin/` or `scripts/` |
 | Allowed tools | a skill's `allowed-tools` front matter |
 

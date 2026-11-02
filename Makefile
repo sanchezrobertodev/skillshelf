@@ -11,8 +11,9 @@ check: typecheck contrast i18n fmt-check lint test
 install:
 	npm ci
 
+## typecheck: tsc plus the production frontend build, as CI runs it
 typecheck:
-	npm run typecheck
+	npm run build
 
 ## contrast: every theme's text colours meet WCAG contrast
 contrast:

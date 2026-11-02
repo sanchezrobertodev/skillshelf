@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 const dir = new URL("../src/i18n/", import.meta.url);
 const load = (file) => JSON.parse(readFileSync(new URL(file, dir), "utf8"));
 const holes = (text) => [...new Set(text.match(/\{\w+\}/g))].sort().join(" ");
+const PLURAL = /_(zero|two|few|many)$/;
 
 const en = load("en.json");
 let failed = 0;
@@ -16,7 +17,13 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "
     if (!(key in t)) fail(`${file}: missing ${key}`);
     else if (holes(t[key]) !== holes(text)) fail(`${file}: ${key} has "${holes(t[key])}", en.json has "${holes(text)}"`);
   }
-  for (const key of Object.keys(t)) if (!(key in en)) fail(`${file}: ${key} is not in en.json`);
+  // Plural forms English doesn't have (CONTRIBUTING.md) are allowed when en.json has the key's _other form.
+  for (const key of Object.keys(t)) {
+    if (key in en) continue;
+    const other = PLURAL.test(key) ? key.replace(PLURAL, "_other") : null;
+    if (!(other in en)) fail(`${file}: ${key} is not in en.json`);
+    else if (holes(t[key]) !== holes(en[other])) fail(`${file}: ${key} has "${holes(t[key])}", en.json ${other} has "${holes(en[other])}"`);
+  }
 }
 
 console.log(failed ? `${failed} problem(s).` : "All languages match en.json.");
