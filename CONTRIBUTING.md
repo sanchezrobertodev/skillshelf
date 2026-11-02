@@ -43,7 +43,7 @@ To add a language:
 
 1. Copy `src/i18n/en.json` to `src/i18n/<code>.json` (an ISO 639-1 code such as `fr` or `de`) and translate the values.
 2. In [`src/i18n/index.ts`](src/i18n/index.ts), import the file and add it to `languages` (with the language's own name, such as `Français`) and to `dicts`.
-3. Run `npm run typecheck`. It fails if the new file is missing a key that `en.json` has.
+3. Run `npm run typecheck` and `node scripts/i18n.mjs`. They fail if the new file is missing a key that `en.json` has, or a text lost one of its `{placeholders}`.
 4. Run `npm run dev`, pick the language in **Settings → General → Language**, and look through each screen for text that's cut off.
 
 ## Themes
