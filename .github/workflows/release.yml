@@ -10,8 +10,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-22.04
+    outputs:
+      native: ${{ steps.changes.outputs.native }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # A pull request checks out a merge commit; its first parent is the base branch.
+          fetch-depth: 2
+      # A pull request bundles only when it touches the Rust app, the npm packages or CI, the
+      # parts that can build differently per OS. Pushes, tags and manual runs always bundle.
+      - name: Platform-specific changes
+        id: changes
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only HEAD^1 HEAD | grep -qE '^(src-tauri/|package(-lock)?\.json$|\.github/)'; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Linux build dependencies
         run: |
           sudo apt-get update
@@ -25,13 +39,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
+      # The typecheck plus the production frontend build, so PRs that skip bundling still build it.
+      - run: npm run build
       - run: node scripts/contrast.mjs
       - run: node scripts/i18n.mjs
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
   bundle:
     needs: test
+    if: github.event_name != 'pull_request' || needs.test.outputs.native == 'true'
     strategy:
       fail-fast: false
       matrix:
