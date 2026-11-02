@@ -20,7 +20,7 @@ The browser mode is the quickest way to work on the UI. It reads `src/dev/snapsh
 
 ## Before you open a pull request
 
-Run `make check`. It runs the typecheck, the theme contrast check, `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`. CI runs the typecheck, the contrast check and the tests on every pull request.
+Run `make check`. It runs the typecheck, the theme contrast check, `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test`. CI runs the typecheck, the contrast check and the tests on every pull request. It also builds the installers on Windows, macOS and Linux when the pull request changes `src-tauri/`, `package.json`, `package-lock.json` or `.github/`.
 
 - Keep a pull request to one change, and say in its description how you checked it.
 - Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice. That section becomes the release notes.
