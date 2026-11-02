@@ -6,6 +6,10 @@ Each version's section is also its GitHub release notes and the "What's new" tex
 
 ## [Unreleased]
 
+### Changed
+
+- The Indigo theme is bluer, so it's easier to tell apart from the violet Workbench.
+
 ## [0.4.0] - 2026-11-01
 
 ### Changed

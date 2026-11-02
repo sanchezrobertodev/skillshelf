@@ -28,7 +28,7 @@ Five palettes, each with a light and a dark block in `src/index.css` that define
 |---|---|---|
 | Workbench | violet, violet-to-teal gradient | Default. Glow, gradient primary buttons and frosted cards |
 | Graphite | near-black / near-white | Monochrome, so orange updates are the only colour |
-| Indigo | indigo | Cool slate surfaces, flat. Close to Workbench in colour |
+| Indigo | blue indigo (`#3B5BDB` / `#91A7FF`) | Cool slate surfaces, flat. Bluer than Workbench's violet so the two stay apart |
 | Rose | rose | Updates use amber so they stay distinct from the accent |
 | High contrast | dark blue / sky | 7:1 text, hard borders instead of shadows, inverted active rail item |
 
